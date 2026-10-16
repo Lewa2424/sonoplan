@@ -16,7 +16,8 @@
 - материалы `id=100` и `id=101` (face `idMat` в официальном mesh);
 - без поверхностных приёмников (`idRs=-1` в mesh);
 - `workingdirectory=.`, десятичный разделитель — точка (ENG-007);
-- `random_seed=0`, урезанный `nbparticules` для CI smoke;
+- `random_seed=1` (≠0: SetRandSeed + single-thread), `nbparticules=20000`;
+- `directivite=0` (omni), `rayon_recepteurp=0.5`, `duree_simulation=0.2`;
 - расчётные полосы: 100 Hz и 1000 Hz.
 
 Лицензия upstream: GPLv3 — см. `inputs/ORIGIN.txt` и `docs/engine-licenses.md`.
@@ -45,5 +46,6 @@ python -m sonoplan_adapter.cli validate-outputs ../fixtures/minimal_room/inputs 
   --manifest ../fixtures/minimal_room/manifest.json --exit-code 0
 ```
 
-`expected/` содержит реальные `.recp` / `statsSPPS.gabe` с CI run `38870337557`.
-Декодер: `sonoplan_adapter.cli decode-outputs`. SCI-003 golden 0.1 dB — **pending** (нет эталонных Lp).
+`expected/` содержит реальные `.recp` / `statsSPPS.gabe` с успешного CI
+с ненулевой энергией (обновляется после `Run SPPS Job`).
+Декодер: `sonoplan_adapter.cli decode-outputs`. SCI-003 golden 0.1 dB — **pending**.

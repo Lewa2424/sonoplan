@@ -218,10 +218,22 @@ jobs:
           assert man.get("sci003Golden", {}).get("status") == "decoder_ok_golden_pending"
           punctual = man.get("punctualReceivers") or []
           assert punctual, "expected at least one decoded punctual receiver"
+          nonzero = []
           for p in punctual:
-              if p.get("energySumGlobal", 0) == 0:
-                  assert p.get("lpDbGlobal") is None, "zero energy must not become 0 dB"
-          print("result_manifest OK:", len(punctual), "receivers; mapAvailable=false")
+              e = p.get("energySumGlobal", 0) or 0
+              lp = p.get("lpDbGlobal")
+              if e == 0:
+                  assert lp is None, "zero energy must not become 0 dB"
+              else:
+                  assert lp is not None, f"{p.get('receiverId')}: nonzero energy must yield finite lpDb"
+                  assert lp == lp, f"{p.get('receiverId')}: lpDb must not be NaN"
+                  nonzero.append((p.get("receiverId"), e, lp))
+          assert nonzero, (
+              "expected nonzero energySumGlobal on at least one punctual receiver "
+              "(fixture/config bug — do not invent dB)"
+          )
+          print("result_manifest OK:", len(punctual), "receivers; nonzero=", nonzero)
+          print("mapAvailable=false")
           PY
 
       - name: Upload job report artifact

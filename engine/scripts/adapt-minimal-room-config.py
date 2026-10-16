@@ -6,6 +6,14 @@ Mesh:   src/python_bindings/tests/mesh.cbin + tetramesh.mbin (20x30x10 m,
         material ids 100/101, no surface receivers).
 
 Does not invent acoustic dB values. Numeric locale: dots (ENG-007).
+
+Zero-energy root causes addressed here (CI run 38870337557):
+- random_seed=0 does NOT call SetRandSeed and keeps multithread on
+  (sppsNantes.cpp); use seed!=0 for single-thread reproducible smoke.
+- SOURCE_TYPE_DIRECTION (directivite=5) + balloon is unnecessary for
+  energy smoke; omnidirectional (0) guarantees isotropic emission.
+- Upstream punctual cluster at (2,2,2) is valid inside this mesh, but a
+  larger receiver radius improves hit probability in a coarse tet mesh.
 """
 
 from __future__ import annotations
@@ -50,7 +58,14 @@ FREQS = [
 # Match face idMat in python_bindings/tests/mesh.cbin at pinned commit.
 MATERIAL_IDS = (100, 101)
 
-# Punctual receivers kept inside the official mesh bbox [0,20]x[0,30]x[0,10].
+# SOURCE_TYPE_OMNIDIRECTION in I-Simpa coreTypes.h
+SOURCE_TYPE_OMNI = 0
+
+# Source + punctual receivers inside official mesh bbox [0,20]x[0,30]x[0,10]
+# and confirmed inside tetramesh.mbin volumes (point-in-tetra).
+# Cluster kept near (2,2,2) like upstream spps/tests/config.xml so the
+# scene stays a real closed-room SPPS case (not invented geometry).
+SOURCE_POS = (2.0, 2.0, 2.0)
 RECEIVERS = [
     # id, name, x, y, z, u, v, w
     (3431, "r_top", 2.0, 2.0, 3.0, 0.0, 0.0, -1.0),
@@ -139,16 +154,24 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     sim.set("enc_calc", "0")
     sim.set("trans_calc", "0")
     sim.set("direct_calc", "0")
-    sim.set("duree_simulation", _f(0.1))
+    # 0.2 s × 0.0005 s → 400 steps; enough path length (~68 m) for wall hits
+    # and punctual sphere crossings in the 20×30×10 m room.
+    sim.set("duree_simulation", _f(0.2))
     sim.set("output_recp_bysource", "0")
     sim.set("output_recs_byfreq", "0")
     sim.set("surf_receiv_method", "0")
+    # seed must be != 0: upstream only SetRandSeed when seed!=0 and then
+    # disables multithread (required for reproducible single-thread smoke).
+    if seed == 0:
+        raise ValueError("random_seed must be != 0 (SPPS skips SetRandSeed when 0)")
     sim.set("random_seed", str(seed))
     sim.set("computation_method", "1")
     sim.set("nbparticules", str(nb_particles))
     sim.set("nbparticules_rendu", "0")
     sim.set("pasdetemps", _f(0.0005))
-    sim.set("rayon_recepteurp", _f(0.31))
+    # Upstream spps/tests uses 0.31; slightly larger radius improves hit rate
+    # on this coarse 102-tet mesh without inventing geometry.
+    sim.set("rayon_recepteurp", _f(0.5))
     sim.set("trans_epsilon", _f(5.0))
     sim.set("intensity_filename", "Intensity vector.rpi")
     sim.set("intensity_folder", "IntensityAnimation")
@@ -193,15 +216,17 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     src = ET.SubElement(sources, "source")
     src.set("id", "4423")
     src.set("name", "main_src")
-    src.set("directivity_file", "speaker-test3.txt")
-    src.set("x", _f(2.0))
-    src.set("y", _f(2.0))
-    src.set("z", _f(2.0))
+    # Omnidirectional: no balloon file required for emission (speaker-test3.txt
+    # remains in inputs for provenance / future directivity checks).
+    src.set("directivity_file", "")
+    src.set("x", _f(SOURCE_POS[0]))
+    src.set("y", _f(SOURCE_POS[1]))
+    src.set("z", _f(SOURCE_POS[2]))
     src.set("delay", _f(0.0))
     src.set("u", _f(1.0))
     src.set("v", _f(0.0))
     src.set("w", _f(0.0))
-    src.set("directivite", "5")
+    src.set("directivite", str(SOURCE_TYPE_OMNI))
     for child in _bfreq_source_db():
         src.append(child)
 
@@ -284,8 +309,13 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="Output config.xml path",
     )
-    parser.add_argument("--nb-particles", type=int, default=10000)
-    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--nb-particles", type=int, default=20000)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=1,
+        help="SPPS random_seed; must be != 0 to enable SetRandSeed + single-thread",
+    )
     args = parser.parse_args(argv)
 
     tree = build_config(nb_particles=args.nb_particles, seed=args.seed)

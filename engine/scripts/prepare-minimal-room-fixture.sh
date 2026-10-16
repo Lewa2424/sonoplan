@@ -18,8 +18,9 @@ ENGINE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${ENGINE_DIR}/.." && pwd)"
 PIN_FILE="${ENGINE_DIR}/PINNED.json"
 OUT_DIR="${ENGINE_DIR}/fixtures/minimal_room/inputs"
-NB_PARTICLES="${NB_PARTICLES:-10000}"
-SEED="${SEED:-0}"
+NB_PARTICLES="${NB_PARTICLES:-20000}"
+# SPPS SetRandSeed only when seed!=0; also forces single-thread.
+SEED="${SEED:-1}"
 
 COMMIT="$(python3 -c "import json; print(json.load(open('${PIN_FILE}'))['isimpa']['commit'])")"
 REPO="$(python3 -c "import json; print(json.load(open('${PIN_FILE}'))['isimpa']['repository'])")"
