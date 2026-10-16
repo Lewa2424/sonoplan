@@ -17,26 +17,26 @@
 `spps/tests` control тоже 0. Бинарник pin `91839747…` содержал link-all в исходниках
 сборки, но маркер вырезался linker’ом; energy всё равно 0 → одного link-all мало.
 
-**Причины:**
-1. Депозит в `ParticuleFreeTranslation` шёл только по `linkedRecepteurP` (оптимизация
-   UTILISER) — на smoke-mesh связи могут быть неполными.
-2. `cdt_vol` выставлялся только при валидном `indexTetra` в Expand; при промахе
-   Init → `cdt_vol=0` → запись `energy_sum*cdt_vol` даёт нули даже при ненулевом
-   накоплении.
-3. Маркер `static const` без использования вырезался `-O2` / gc-sections → ложное
-   ощущение «патч в бинарнике».
+**Полярность UTILISER (не перепутать):**
+- `#define UTILISER_MAILLAGE_OPTIMISATION` → компилируется ветка `#else`.
+- Скомпилированный `FreeParticleTranslation` **уже всегда** вызывает deposit.
+- Gate `linkedRecepteurP` — только в мёртвом `#ifndef`-overload.
+
+**Причины нулей на punctual (при Total energy > 0):**
+1. Депозит в `ParticuleFreeTranslation` шёл только по `linkedRecepteurP`.
+2. `cdt_vol` мог остаться 0 при промахе `indexTetra` → `energy_sum*0`.
+3. `RaySphere` возвращает false / clamp chord=0, пока частица внутри сферы
+   (типично при colocated source/receiver).
+4. Маркер `static const` без touch вырезался `-O2`.
 
 **Исправления:**
-1. Всегда итерировать `recepteur_p_List` при депозите (link — опционально).
-2. Всегда задавать `cdt_vol=(c·ρ)/V_sphere` для каждого punctual receiver.
-3. Дополнительно линковать тетраэдры в `rayon+10`.
-4. **Снять gate** в **UTILISER** (скомпилированный) `FreeParticleTranslation`:
-   всегда вызывать `ParticuleFreeTranslation`. Не путать с `#ifndef`-overload
-   (мёртвый код), который и так всегда вызывает deposit.
-5. Robust chord: если RaySphere даёт Lintersect=0, но endpoint внутри сферы —
-   брать длину шага (реальная энергия частицы, не фейк дБ).
-6. Маркер `__attribute__((used))` + touch на UTILISER-пути;
-   `build-spps-native.sh` **падает**, если `grep -a` не находит маркер в `spps`.
+1. Всегда итерировать `recepteur_p_List` при депозите.
+2. Всегда задавать `cdt_vol=(c·ρ)/V_sphere`.
+3. Линковать тетраэдры в `rayon+10`.
+4. Robust outside RaySphere: при miss/clamp и endpoint внутри — длина шага
+   (реальная энергия частицы, не фейк дБ).
+5. Маркер `__attribute__((used))` + touch на **скомпилированном** `#else`-пути;
+   `build-spps-native.sh` падает, если маркер отсутствует в `spps`.
 
 **UTILISER:** оставляем `#define` — ветка `#ifndef` не компилируется.
 
