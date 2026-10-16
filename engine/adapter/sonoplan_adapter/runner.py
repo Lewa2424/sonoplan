@@ -38,9 +38,12 @@ def run_spps(request: SppsRunRequest) -> SppsRunResult:
 
     env = os.environ.copy()
     env.update(request.env)
-    # Fixed locale for numeric consistency (ENG-007).
-    env.setdefault("LC_ALL", "C")
-    env.setdefault("LANG", "C")
+    # Force C locale (overwrite). glibc atof is LC_NUMERIC-sensitive:
+    # in fr_FR/de_DE, atof("0.500000") → 0, which zeros pasdetemps/rayon
+    # and yields empty punctual energy with all particles still "remaining".
+    env["LC_ALL"] = "C"
+    env["LC_NUMERIC"] = "C"
+    env["LANG"] = "C"
 
     argv = request.argv()
     # Default name "spps" resolves via SPPS_BIN (request.env, then process env).

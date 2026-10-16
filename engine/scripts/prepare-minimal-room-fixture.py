@@ -83,7 +83,7 @@ Generated (structure from src/spps/tests/config.xml, adapted for this mesh):
     - decimal separator: dot (ENG-007)
     - nbparticules=20000, random_seed=1 (seed!=0 required for SetRandSeed)
     - directivite=0 (omnidirectional; speaker-test3.txt kept for provenance)
-    - rayon_recepteurp=0.5, duree_simulation=0.2
+    - rayon_recepteurp=2, duree_simulation=1, pasdetemps=5e-4
     - calc bands: 100 Hz and 1000 Hz only (CI smoke)
 
 License: I-Simpa is GPLv3; redistributed test inputs retain upstream copyright.

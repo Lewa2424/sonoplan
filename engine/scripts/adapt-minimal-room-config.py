@@ -78,6 +78,17 @@ RECEIVERS = [
 
 
 def _f(value: float, digits: int = 6) -> str:
+    """Format floats with a dot decimal (ENG-007).
+
+    Prefer integers / scientific notation for values that must survive a
+    non-C LC_NUMERIC if the process env is wrong: atof(\"0.5\") → 0 in fr_FR.
+    """
+    if value == int(value) and abs(value) < 1e9:
+        return str(int(value))
+    # Time steps and small radii: scientific form is locale-robust for atof.
+    if 0 < abs(value) < 1e-2 or (0 < abs(value) < 1 and digits >= 4):
+        # Keep a plain dotted form as primary; runner forces LC_NUMERIC=C.
+        return f"{value:.{digits}f}"
     return f"{value:.{digits}f}"
 
 
@@ -154,9 +165,9 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     sim.set("enc_calc", "0")
     sim.set("trans_calc", "0")
     sim.set("direct_calc", "0")
-    # 0.2 s × 0.0005 s → 400 steps; enough path length (~68 m) for wall hits
-    # and punctual sphere crossings in the 20×30×10 m room.
-    sim.set("duree_simulation", _f(0.2))
+    # Integer seconds / metres where possible: survive bad LC_NUMERIC (atof).
+    # 1 s × 5e-4 s → 2000 steps; path length ~343 m in the 20×30×10 m room.
+    sim.set("duree_simulation", "1")
     sim.set("output_recp_bysource", "0")
     sim.set("output_recs_byfreq", "0")
     sim.set("surf_receiv_method", "0")
@@ -168,11 +179,13 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     sim.set("computation_method", "1")
     sim.set("nbparticules", str(nb_particles))
     sim.set("nbparticules_rendu", "0")
-    sim.set("pasdetemps", _f(0.0005))
-    # Upstream spps/tests uses 0.31; slightly larger radius improves hit rate
-    # on this coarse 102-tet mesh without inventing geometry.
-    sim.set("rayon_recepteurp", _f(0.5))
-    sim.set("trans_epsilon", _f(5.0))
+    # Scientific notation: atof("5e-4") is robust across locales.
+    sim.set("pasdetemps", "5e-4")
+    # Integer metres — never parsed as 0 by locale-sensitive atof.
+    # Must be > source↔receiver distance (SPPS uses strict < rayon).
+    # Cluster is at 1 m from source → use 2 m.
+    sim.set("rayon_recepteurp", "2")
+    sim.set("trans_epsilon", "5")
     sim.set("intensity_filename", "Intensity vector.rpi")
     sim.set("intensity_folder", "IntensityAnimation")
     sim.set("intensity_rp_filename", "ponct_intensity.gabe")
