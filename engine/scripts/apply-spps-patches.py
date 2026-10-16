@@ -15,7 +15,6 @@ indexTetra is valid; unused static markers stripped by -O2. This script:
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
@@ -123,22 +122,34 @@ def _deposit_all_receivers(src: Path) -> None:
 
 
 def _embed_marker(src: Path) -> None:
+    import re
+
     target = src / "src" / "spps" / "CalculationCore.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
-    if MARKER in text:
-        print(f"patch-marker: already present in {target}")
-        return
+    # Drop any prior marker symbols (old .patch or previous apply).
+    text = re.sub(
+        r"(?:__attribute__\(\(used\)\)\s*)?static const char sonoplan_spps_patch\[\] = \"[^\"]*\";\n?",
+        "",
+        text,
+    )
+    text = re.sub(
+        r"static void sonoplan_spps_touch_marker\(void\)\s*\{[^}]*\}\n?",
+        "",
+        text,
+    )
+    text = re.sub(r"\tsonoplan_spps_touch_marker\(\);\n", "", text)
     needle = '#include "CalculationCore.h"'
     if needle not in text:
         raise SystemExit(f"patch-marker: include missing in {target}")
-    blob = (
-        needle
-        + "\n"
-        + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
-        + "static void sonoplan_spps_touch_marker(void) "
-        + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
-    )
-    text = text.replace(needle, blob, 1)
+    if f'"{MARKER}"' not in text:
+        blob = (
+            needle
+            + "\n"
+            + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
+            + "static void sonoplan_spps_touch_marker(void) "
+            + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
+        )
+        text = text.replace(needle, blob, 1)
     util_ft = (
         "void CalculationCore::FreeParticleTranslation"
         "(CONF_PARTICULE &configurationP,const vec3 &translationVector)\n"
@@ -152,10 +163,11 @@ def _embed_marker(src: Path) -> None:
         "\tsonoplan_spps_touch_marker();\n"
         "\treportTool->ParticuleFreeTranslation"
     )
-    idx = text.rfind(util_ft)
-    if idx < 0:
-        raise SystemExit("patch-marker: UTILISER FreeParticleTranslation not found")
-    text = text[:idx] + util_ft_new + text[idx + len(util_ft) :]
+    if "sonoplan_spps_touch_marker();" not in text:
+        idx = text.rfind(util_ft)
+        if idx < 0:
+            raise SystemExit("patch-marker: UTILISER FreeParticleTranslation not found")
+        text = text[:idx] + util_ft_new + text[idx + len(util_ft) :]
     target.write_text(text, encoding="utf-8", newline="\n")
     print(f"patch-marker: embedded {MARKER} in {target}")
 
@@ -170,22 +182,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not an I-Simpa tree: {src}", file=sys.stderr)
         return 1
 
-    # Documenting .patch files may fail; string fallbacks below are authoritative.
+    # Documenting engine/patches/*.patch are not applied here: outdated marker
+    # patches conflict with string fallbacks (redefinition of sonoplan_spps_patch).
+    # Source of truth: the three string transforms below.
     for patch in sorted(PATCH_DIR.glob("*.patch")):
-        print(f"git apply {patch.name} ...")
-        r = subprocess.run(
-            ["git", "apply", "--whitespace=nowarn", str(patch)],
-            cwd=src,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if r.returncode == 0:
-            print(f"  ok: {patch.name}")
-        else:
-            print(f"  git apply failed ({r.returncode}); string fallbacks follow")
-            if r.stderr:
-                print(r.stderr[:400])
+        print(f"skip git apply {patch.name} (string fallbacks are authoritative)")
 
     _link_and_cdt(src)
     _deposit_all_receivers(src)
