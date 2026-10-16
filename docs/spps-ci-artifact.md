@@ -12,7 +12,7 @@ Pinned build from GitHub Actions — **не коммитить** бинарни�
 | I-Simpa commit | `929a5c8e5f590b189f29155faeff8670f3699479` |
 | SHA-256 (`spps`) | `918397477af40d73e6ee96ff7748db1a705b6df6d1ede13ec85d0043f2c42d16` |
 | Дата pin | 2026-10-16 |
-| Примечание | Pin после `cf58575` (patches 0001+0002). Критерий: `energySumGlobal > 0` / конечный `lpDb` в Run SPPS Job. |
+| Примечание | Known-good pin. Experimental patches paused (path A). Energy=0 на headless — blocker, не критерий зелёного CI; см. `docs/spps-energy-blocker.md`. |
 
 ## Скачать (gh CLI)
 

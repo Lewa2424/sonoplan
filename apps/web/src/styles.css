@@ -102,6 +102,16 @@ body {
   margin: 0 0 8px;
 }
 
+.page-banner {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.95rem;
+}
+
 .page-hint,
 .page-meta {
   margin: 8px 0 0;

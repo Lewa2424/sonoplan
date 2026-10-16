@@ -27,35 +27,39 @@
 - Docker Engine + Compose (инфраструктура)
 - На Windows для сборки SPPS предпочтителен WSL2
 
-## Быстрый старт (каркас)
+## Быстрый старт: API + Web (локально)
+
+Нужны: Node.js LTS ≥ 20, **pnpm** 9.x, Python ≥ 3.11.  
+База: Neon через `services/api/.env` (`DATABASE_URL`, не коммитить) — см. `docs/neon-postgres.md`.
 
 ```bash
-# JS-пакеты
+# Один раз: зависимости
 pnpm install
-pnpm --filter @sonoplan/domain test
-pnpm --filter @sonoplan/web dev
-
-# Python API (из services/api)
+cd services/api
 python -m venv .venv
-# Windows: .venv\Scripts\activate
+# Windows:
+.venv\Scripts\activate
 pip install -e ".[dev]"
-uvicorn sonoplan_api.main:app --reload --app-dir src
+# alembic upgrade head   # если схема ещё не накатана на Neon
 
-# Инфраструктура (позже, когда сервисы не stub)
-cd infra
-cp .env.example .env
-docker compose up -d postgres rabbitmq minio
+# Terminal 1 — API (порт 8000), из services/api с активированным .venv
+uvicorn sonoplan_api.main:app --reload --app-dir src --host 127.0.0.1 --port 8000
+
+# Terminal 2 — Web (порт 5173), из корня репо
+pnpm --filter @sonoplan/web dev
 ```
 
-Compose поднимает PostgreSQL, RabbitMQ и MinIO (S3-совместимое хранилище). Сервисы `api`/`worker`/`web` в compose помечены как stubs до готовности образов.
+Открыть: `http://127.0.0.1:5173` (API docs: `http://127.0.0.1:8000/docs`).  
+Клиент ждёт `VITE_API_BASE_URL=http://127.0.0.1:8000` (по умолчанию в web).
+
+Опционально локальный Postgres/RabbitMQ/MinIO: `infra/docker-compose.yml` (api/web в compose — stubs).
 
 ## Стадии MVP
 
-- **STG-01** — воспроизводимый путь SPPS (`engine/`)
+- **STG-01** — воспроизводимый путь SPPS (`engine/`); Build CI; **energy blocker paused** — `docs/spps-energy-blocker.md`
 - **STG-02** — схема проекта, единицы, координаты, ревизии, минимальный API
 - **STG-03** — мобильный редактор цеха (план Konva, draft ETag, validate/revision)
-- **STG-04** — `POST/GET /jobs` + cancel, worker→adapter, CI `run-spps-job.yml`; экран «Расчёты» без теплокарты
-- Полный прогон ядра блокируется отсутствием fixture inputs (`config.xml` / mesh) — см. `CODE_MAP.md`
+- **STG-04** — `POST/GET /jobs` + cancel, worker→adapter, CI `run-spps-job.yml`; экран «Расчёты» без теплокарты и без фейковых дБ
 
 Не выдавать интерполяцию/палитру за физический расчёт. Не подменять SPPS заранее нарисованной картой.
 

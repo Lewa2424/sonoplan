@@ -1,5 +1,5 @@
 # Build SPPS from pin + run OUR binary on literal I-Simpa official test assets.
-# Goal: prove energy>0 on any official control before trusting minimal_room.
+# Path A: energy>0 chase paused — decode/honesty only (docs/spps-energy-blocker.md).
 # Does not invent dB. Uploads full stdout + statsSPPS decode.
 
 name: SPPS Official Smoke
@@ -52,20 +52,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cpm-spps-
 
-      - name: Build SPPS (native, patched)
+      - name: Build SPPS (native)
         run: |
           chmod +x engine/scripts/fetch-isimpa.sh engine/scripts/build-spps-native.sh
           ./engine/scripts/build-spps-native.sh
 
-      - name: Prepare output dir + verify patch marker
+      - name: Prepare output dir
         run: |
           set -euo pipefail
           mkdir -p ci-official-smoke
-          # Prefer grep -a: Release may leave the used marker without a NUL-terminated
-          # strings(1) hit depending on section packing.
-          grep -a -F 'sonoplan-deposit-all-recp-v3' engine/dist/spps \
-            || { echo "BUILD_FAIL: patch marker missing in spps binary"; exit 1; }
-          echo "BUILD_OK marker present"
+          test -x engine/dist/spps || { echo "BUILD_FAIL: spps missing"; exit 1; }
+          echo "BUILD_OK (experimental patches paused)"
           sha256sum engine/dist/spps | tee ci-official-smoke/sha256.txt
 
       - name: Prepare official I-Simpa control (literal assets)

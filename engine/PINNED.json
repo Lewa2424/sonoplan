@@ -28,7 +28,7 @@
     "github_run_url": "https://github.com/Lewa2424/sonoplan/actions/runs/38879414939",
     "artifact_name": "spps-linux-x86_64-929a5c8e5f59",
     "pinned_at": "2026-10-16",
-    "pin_note": "Build cf58575 with patches 0001+0002 (string fallback). Expect energySumGlobal>0 in Run SPPS Job.",
+    "pin_note": "Known-good Build artifact. Experimental SonoPlan patches PAUSED (path A); energySumGlobal=0 on headless is documented blocker — see docs/spps-energy-blocker.md. Do not invent dB.",
     "local_path_hint": "engine/binaries/spps-ci/spps-linux-x86_64-929a5c8e5f59/spps",
     "download_doc": "docs/spps-ci-artifact.md"
   },

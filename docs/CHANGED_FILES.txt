@@ -163,3 +163,11 @@ engine/patches/0002-spps-link-all-tetras-within-rayon.patch
 .github/workflows/spps-official-smoke.yml
 docs/engine/BLOCKER-headless-spps-punctual-energy-zero.md
 docs/commits/README.md
+docs/spps-energy-blocker.md
+docs/spps-ci-artifact.md
+engine/BUILD_STATUS.md
+engine/PINNED.json
+engine/scripts/build-spps-native.sh
+CODE_MAP.md
+README.md
+apps/web/src/styles.css

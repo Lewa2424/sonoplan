@@ -45,7 +45,7 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `.github/workflows/run-spps-job.yml` | download artifact → adapter attempt → decode-outputs → ResultManifest artifact |
 | `infra/docker-compose.yml` | optional local postgres, rabbitmq, minio; api/worker/web — profile stubs |
 | `infra/.env.example` | шаблон env; prod/staging Postgres = Neon (`sslmode=require`) |
-| `docs/` | ТЗ-выписки, `CHANGED_FILES.txt`, `spps-ci-artifact.md`, заметка Neon |
+| `docs/` | ТЗ-выписки, `CHANGED_FILES.txt`, `spps-energy-blocker.md`, `spps-ci-artifact.md`, Neon |
 | `.cursor/rules/` | правила Cursor / SonoPlan |
 
 ## Точки входа
@@ -88,7 +88,7 @@ Jobs по умолчанию inline (`SONOPLAN_JOBS_INLINE=1`). На Windows job
 |---------|------------|
 | `/projects` | Список/создание через API; offline-черновик с явной пометкой |
 | `/model`, `/model/:projectId` | План Konva, свойства, validate, revision, draft ETag sync |
-| `/calculations` | Создать job по ревизии сессии, polling статуса, манифест / «карта позже»; **без** теплокарты |
+| `/calculations` | Job по ревизии + polling; явный баннер: уровни не подтверждены (energy blocker paused); **без** теплокарты и фейковых дБ |
 
 ## Владельцы состояния и источники истины
 
@@ -99,7 +99,7 @@ Jobs по умолчанию inline (`SONOPLAN_JOBS_INLINE=1`). На Windows job
 | Ревизия на расчёт | API `revisions.snapshot` | Неизменяема; `snapshotHash` |
 | Job | API `jobs` | `revisionId` + `snapshotHash`; Idempotency-Key |
 | UI selection / toolMode / camera | Zustand `editorStore` | Не входят в snapshotHash |
-| Результат | Worker/adapter → `result_manifest` | punctual `.recp` = energy p²-homogeneous; `mapAvailable` только после реального surface decode (не из punctual) |
+| Результат | Worker/adapter → `result_manifest` | punctual energy p²-homogeneous; при energy=0 → `lpDb=null` (не 0 дБ); `mapAvailable` только после реального surface decode; **energy blocker paused** — см. `docs/spps-energy-blocker.md` |
 | Возможности ядра | `GET /capabilities` | **stub** |
 | Координаты / геометрия | `packages/domain` | X,Y пол, Z вверх; Three = X,Z,−Y |
 
@@ -133,7 +133,8 @@ Jobs по умолчанию inline (`SONOPLAN_JOBS_INLINE=1`). На Windows job
 - Базовый SPPS не заявляет дифракцию/интерференцию/моды
 - PII/секреты не логировать и не коммитить
 
-## Блокер полного прогона ядра
+## Блокер акустики (paused)
 
-`engine/fixtures/minimal_room/inputs` — scaffold без `config.xml` / `mesh.cbin` / `tetramesh.mbin`.  
-Пока они не заполнены реальными файлами pinned-сборки, job/CI получают `FIXTURE_INPUTS_MISSING` (это ожидаемый блокер, не фейковый success).
+Headless SPPS: `energySumGlobal=0` → уровни/дБ не подтверждены. Experimental patches выключены;
+погоня за nonzero energy на паузе (path A). Канон: `docs/spps-energy-blocker.md`.  
+UI/CI не ждут и не изобретают дБ; редактор проектов/модели остаётся рабочим.

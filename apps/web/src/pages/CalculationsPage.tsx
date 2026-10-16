@@ -110,6 +110,9 @@ export function CalculationsPage() {
     <section className="page">
       <h2>{ru.calculations.title}</h2>
       <p className="page-lead">{ru.calculations.lead}</p>
+      <p className="page-banner" role="status">
+        {ru.calculations.levelsBlocked}
+      </p>
       <p className="page-hint">{ru.calculations.hint}</p>
 
       {lastRevision ? (
@@ -189,7 +192,10 @@ export function CalculationsPage() {
                   {(manifest?.artifactPaths ?? []).join(", ") || "—"}
                 </p>
               ) : (
-                <p className="page-hint">{ru.calculations.mapLater}</p>
+                <>
+                  <p className="page-hint">{ru.calculations.mapLater}</p>
+                  <p className="page-meta">{ru.calculations.noFakeLevels}</p>
+                </>
               )}
               {manifest?.mapDeferredReason ? (
                 <p className="page-meta">{manifest.mapDeferredReason}</p>

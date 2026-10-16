@@ -62,9 +62,15 @@ Unit-тесты валидации выходов — OK без Docker. `SPPS_BI
 - Адаптер отклоняет `exit_code=0` без выходных файлов (4 unit-теста OK; CLI broken_exit0 → exit 1).
 - Закреплён SHA I-Simpa и флаги CMake в `PINNED.json`.
 
+## Path A (2026-10-16)
+
+Погоня за punctual energy/дБ **на паузе**. Experimental patches выключены;
+канон: [`docs/spps-energy-blocker.md`](../docs/spps-energy-blocker.md). Фокус: UI + Neon.
+
 ## Следующий шаг
 
-1. Download SPPS: см. [`docs/spps-ci-artifact.md`](../docs/spps-ci-artifact.md).
-2. CI: `Run SPPS Job` (`run-spps-job.yml`) — attempt-run + validate-outputs на `minimal_room`.
-3. Пересборка inputs: `./engine/scripts/prepare-minimal-room-fixture.sh` (или `.py`).
-4. Подключить worker → adapter с `SPPS_BIN` (STG-04).
+1. Зелёный Build SPPS без experimental patches.
+2. Download SPPS: см. [`docs/spps-ci-artifact.md`](../docs/spps-ci-artifact.md).
+3. CI: `Run SPPS Job` — decode/honesty (energy=0 допустим на паузе).
+4. Подключить worker → adapter с `SPPS_BIN` на Linux (не Windows host).
+5. Отдельный этап: energy>0 (только по запросу владельца).

@@ -52,19 +52,9 @@ if [[ "${ACTUAL}" != "${COMMIT}" ]]; then
   exit 1
 fi
 
-# SonoPlan patches (punctual deposit-all + cdt_vol; ENG-009 status later)
-echo "Applying SPPS patches via apply-spps-patches.py ..."
+# SonoPlan patches: PAUSED (path A) — see docs/spps-energy-blocker.md
+echo "SPPS patch gate via apply-spps-patches.py (experimental apply off) ..."
 python3 "${ENGINE_DIR}/scripts/apply-spps-patches.py" "${SRC}"
-# Force rebuild of patched translation units (incremental cmake can skip).
-touch \
-  "${SRC}/src/spps/CalculationCore.cpp" \
-  "${SRC}/src/spps/sppsInitialisation.cpp" \
-  "${SRC}/src/spps/input_output/reportmanager.cpp"
-rm -f \
-  "${SRC}/build/src/spps/CMakeFiles/spps.dir/CalculationCore.cpp.o" \
-  "${SRC}/build/src/spps/CMakeFiles/spps.dir/sppsInitialisation.cpp.o" \
-  "${SRC}/build/src/spps/CMakeFiles/spps.dir/input_output/reportmanager.cpp.o" \
-  2>/dev/null || true
 
 mkdir -p "${SRC}/build" "${DIST_DIR}" "${CPM_SOURCE_CACHE}"
 cd "${SRC}/build"
@@ -83,12 +73,8 @@ if [[ -z "${SPPS_BIN}" ]]; then
   exit 1
 fi
 
-MARKER="sonoplan-deposit-all-recp-v3"
-if ! grep -a -F -q "${MARKER}" "${SPPS_BIN}"; then
-  echo "ERROR: SPPS binary missing patch marker '${MARKER}' — patches not in binary" >&2
-  exit 1
-fi
-echo "OK: patch marker '${MARKER}' present in ${SPPS_BIN}"
+# Path A: experimental patch marker not required (vanilla pinned I-Simpa build).
+echo "OK: SPPS binary built (experimental SonoPlan patches paused)"
 
 cp -a "${SPPS_BIN}" "${DIST_DIR}/spps"
 printf 'SPPS_BIN=%s\nISIMPA_COMMIT=%s\nBUILD_TYPE=%s\n' \

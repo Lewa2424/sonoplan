@@ -1,6 +1,8 @@
 # BLOCKER: headless SPPS punctual energy = 0
 
-**Статус:** открыт · **Дата:** 2026-10-16 · **Не изобретать dB** при `energySumGlobal == 0`.
+**Статус:** PAUSED (path A) · **Дата:** 2026-10-16 · **Не изобретать dB** при `energySumGlobal == 0`.
+
+Каноническая запись паузы: [`docs/spps-energy-blocker.md`](../spps-energy-blocker.md).
 
 ## Факт
 
@@ -25,12 +27,12 @@ official upstream control (`spps/tests` cube), не только на SonoPlan f
 ## Что не доказано
 
 Серия deposit/link/cdt_vol патчей (`b7329d4` и раньше) **не** доказала
-`energySumGlobal > 0` даже на official fixture. Root-cause agent `41e4aecc`:
-выводов в `docs/commits/` нет (каталог пуст на момент записи).
+`energySumGlobal > 0` даже на official fixture.
 
-## Политика до снятия BLOCKER
+## Политика на паузе (path A)
 
-- Не делать слепой deposit-патч без доказанной гипотезы и воспроизводимого до/после.
-- Build: не применять устаревшие documenting `engine/patches/*.patch` через
-  `git apply` вместе со string-path (ломает компиляцию маркером).
+- Experimental apply **выключен** (`engine/scripts/apply-spps-patches.py`).
+- Build: не применять documenting `engine/patches/*.patch` через `git apply`.
+- CI не требует nonzero energy для зелёного decode/honesty gate.
 - UI/API не публиковать выдуманные Lp/карты из нулевой энергии.
+- Новые energy-фиксы — только отдельным этапом по запросу владельца.
