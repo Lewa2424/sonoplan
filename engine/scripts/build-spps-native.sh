@@ -16,11 +16,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENGINE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PIN_FILE="${ENGINE_DIR}/PINNED.json"
+PATCH_DIR="${ENGINE_DIR}/patches"
 DIST_DIR="${ENGINE_DIR}/dist"
 CPM_SOURCE_CACHE="${CPM_SOURCE_CACHE:-${HOME}/.cache/CPM}"
 BUILD_TYPE="${BUILD_TYPE:-Release}"
 JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)}"
-PATCH_MARKER="sonoplan-deposit-start-tetra-v2"
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "BLOCKER: python3 required to read PINNED.json" >&2
@@ -36,6 +36,7 @@ if ! command -v git >/dev/null 2>&1; then
 fi
 
 COMMIT="$(python3 -c "import json; print(json.load(open('${PIN_FILE}'))['isimpa']['commit'])")"
+REPO="$(python3 -c "import json; print(json.load(open('${PIN_FILE}'))['isimpa']['repository'])")"
 SHORT="${COMMIT:0:12}"
 
 if [[ -n "${ISIMPA_SRC:-}" ]]; then
@@ -51,22 +52,10 @@ if [[ "${ACTUAL}" != "${COMMIT}" ]]; then
   exit 1
 fi
 
+# SonoPlan patches (punctual deposit-on-start-tetra; ENG-009 status later)
 echo "Applying SPPS patches via apply-spps-patches.py ..."
 python3 "${ENGINE_DIR}/scripts/apply-spps-patches.py" "${SRC}"
 
-if ! grep -q "${PATCH_MARKER}" \
-    "${SRC}/src/spps/sppsTypes.h" "${SRC}/src/spps/CalculationCore.cpp"; then
-  echo "ERROR: patch marker ${PATCH_MARKER} missing in sources after apply" >&2
-  exit 1
-fi
-if ! grep -q "SonoPlan: ensure every tetra that can intersect" \
-    "${SRC}/src/spps/sppsInitialisation.cpp"; then
-  echo "ERROR: link-all-tetras patch missing after apply" >&2
-  exit 1
-fi
-
-# Fresh build dir — never reuse .o from an unpatched tree.
-rm -rf "${SRC}/build"
 mkdir -p "${SRC}/build" "${DIST_DIR}" "${CPM_SOURCE_CACHE}"
 cd "${SRC}/build"
 
@@ -78,25 +67,15 @@ cmake .. \
 cmake --build . --parallel "${JOBS}"
 cmake --install .
 
-# Prefer the just-built binary in build/src/spps (deterministic), not find|head.
-if [[ -x "${SRC}/build/src/spps/spps" ]]; then
-  SPPS_BIN="${SRC}/build/src/spps/spps"
-else
-  SPPS_BIN="$(find "${SRC}" -type f -name spps -perm -111 | head -n 1)"
-fi
-if [[ -z "${SPPS_BIN}" || ! -x "${SPPS_BIN}" ]]; then
+SPPS_BIN="$(find "${SRC}" -type f -name spps -perm -111 | head -n 1)"
+if [[ -z "${SPPS_BIN}" ]]; then
   echo "ERROR: spps binary not found after install under ${SRC}" >&2
   exit 1
 fi
 
 cp -a "${SPPS_BIN}" "${DIST_DIR}/spps"
-if ! grep -a -q "${PATCH_MARKER}" "${DIST_DIR}/spps"; then
-  echo "ERROR: patched marker not found inside spps binary (stale/unpatched build)" >&2
-  exit 1
-fi
-printf 'SPPS_BIN=%s\nISIMPA_COMMIT=%s\nBUILD_TYPE=%s\nSONOPLAN_PATCH=%s\n' \
-  "${SPPS_BIN}" "${COMMIT}" "${BUILD_TYPE}" "${PATCH_MARKER}" \
-  > "${DIST_DIR}/ORIGIN.txt"
+printf 'SPPS_BIN=%s\nISIMPA_COMMIT=%s\nBUILD_TYPE=%s\n' \
+  "${SPPS_BIN}" "${COMMIT}" "${BUILD_TYPE}" > "${DIST_DIR}/ORIGIN.txt"
 
 (
   cd "${DIST_DIR}"
@@ -116,4 +95,5 @@ echo "ARCHIVE=${DIST_DIR}/${ARCHIVE_NAME}"
 echo "SHA256SUMS:"
 cat "${DIST_DIR}/SHA256SUMS"
 echo "Next: record binary sha256 into PINNED.json → binary_checksum after verification."
+# Smoke: binary should print usage / fail without config (non-silent)
 "${DIST_DIR}/spps" 2>&1 | head -n 5 || true

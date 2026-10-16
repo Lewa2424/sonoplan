@@ -1,6 +1,8 @@
 # STG-01/04: real SPPS attempt on Linux CI without Docker Desktop on the owner machine.
-# Builds pinned I-Simpa + SonoPlan patches, runs official control + minimal_room,
-# adapter gates, uploads report. No invented heatmap / dB values.
+# Downloads pinned SPPS artifact (gh), runs adapter gates + fixture attempt, uploads report.
+#
+# Requires engine/fixtures/minimal_room/inputs (config.xml + official mesh/tetramesh).
+# Success = SPPS exit + validate_outputs OK. No invented heatmap / dB values.
 
 name: Run SPPS Job
 
@@ -15,26 +17,17 @@ name: Run SPPS Job
       - "engine/scripts/adapt-minimal-room-config.py"
       - "engine/scripts/prepare-official-spps-control.py"
       - "engine/scripts/patch-tetramesh-idvolume.py"
-      - "engine/scripts/apply-spps-patches.py"
-      - "engine/scripts/build-spps-native.sh"
-      - "engine/scripts/fetch-isimpa.sh"
-      - "engine/patches/**"
-      - "engine/Dockerfile"
       - ".github/workflows/run-spps-job.yml"
 
 concurrency:
   group: run-spps-job-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cache/CPM
-
 jobs:
   attempt-fixture:
     name: Adapter + SPPS fixture attempt (ubuntu-22.04)
     runs-on: ubuntu-22.04
-    # Native SPPS build + fixture; pin download alone cannot apply new patches.
-    timeout-minutes: 120
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
@@ -51,7 +44,7 @@ jobs:
       - name: Read pin + prepare dirs
         id: pin
         run: |
-          mkdir -p ci-spps-job engine/binaries/spps-ci engine/dist
+          mkdir -p ci-spps-job engine/binaries/spps-ci
           python3 <<'PY'
           import json, os
           from pathlib import Path
@@ -82,40 +75,30 @@ jobs:
           ls -la "$IN"
           cat "$IN/ORIGIN.txt"
 
-      - name: Install SPPS build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential ca-certificates cmake git python3 python3-dev swig \
-            libboost-all-dev byacc gettext libpng-dev libjpeg-dev
-
-      - name: Cache CPM packages
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CPM_SOURCE_CACHE }}
-          key: ${{ runner.os }}-cpm-spps-${{ hashFiles('engine/PINNED.json') }}
-          restore-keys: |
-            ${{ runner.os }}-cpm-spps-
-
-      - name: Build SPPS from pinned I-Simpa + SonoPlan patches
+      - name: Download SPPS artifact (gh)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          chmod +x engine/scripts/fetch-isimpa.sh engine/scripts/build-spps-native.sh
-          ./engine/scripts/build-spps-native.sh
-          test -x engine/dist/spps
-          cp -a engine/dist/spps engine/binaries/spps-ci/spps
-          cp -a engine/dist/ORIGIN.txt engine/dist/SHA256SUMS ci-spps-job/ || true
-          # Prove patches landed in the build tree (not a stale unpatched pin).
-          grep -n "SonoPlan: ensure every tetra" engine/.cache/isimpa/src/spps/sppsInitialisation.cpp \
-            | tee ci-spps-job/patch_0002_applied.txt
-          grep -n "SonoPlan: deposit on start-tetra" engine/.cache/isimpa/src/spps/CalculationCore.cpp \
-            | tee ci-spps-job/patch_0001_applied.txt || true
+          RUN_ID="${{ steps.pin.outputs.run_id }}"
+          ART="${{ steps.pin.outputs.artifact }}"
+          DEST="engine/binaries/spps-ci"
+          if [[ -n "$RUN_ID" ]]; then
+            gh run download "$RUN_ID" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+          fi
+          if ! find "$DEST" -type f -name spps | grep -q .; then
+            echo "Pinned run download missed; trying latest successful Build SPPS run…"
+            LATEST=$(gh run list --repo "${{ github.repository }}" --workflow build-spps.yml --status success --limit 1 --json databaseId -q '.[0].databaseId' || true)
+            if [[ -n "$LATEST" && "$LATEST" != "null" ]]; then
+              gh run download "$LATEST" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+            fi
+          fi
 
       - name: Locate SPPS binary
         id: bin
         run: |
           set -euo pipefail
-          FOUND=$(find engine/binaries engine/dist -type f -name spps 2>/dev/null | head -n1 || true)
+          FOUND=$(find engine/binaries -type f -name spps 2>/dev/null | head -n1 || true)
           if [[ -z "$FOUND" ]]; then
             echo "found=0" >> "$GITHUB_OUTPUT"
             echo "path=" >> "$GITHUB_OUTPUT"
@@ -128,8 +111,15 @@ jobs:
           echo "found=1" >> "$GITHUB_OUTPUT"
           echo "path=$ABS" >> "$GITHUB_OUTPUT"
           sha256sum "$ABS" | tee ci-spps-job/sha256.txt
-          # Built-this-run binary will not match historical PINNED checksum — record both.
-          echo "pin_checksum=${{ steps.pin.outputs.checksum }}" | tee -a ci-spps-job/sha256.txt
+
+      - name: Verify checksum when present
+        if: steps.bin.outputs.found == '1' && steps.pin.outputs.checksum != ''
+        run: |
+          set -euo pipefail
+          ACTUAL=$(sha256sum "${{ steps.bin.outputs.path }}" | awk '{print $1}')
+          EXPECTED="${{ steps.pin.outputs.checksum }}"
+          echo "actual=$ACTUAL expected=$EXPECTED"
+          test "$ACTUAL" = "$EXPECTED"
 
       - name: Adapter unit tests (no binary required)
         working-directory: engine/adapter
@@ -262,13 +252,6 @@ jobs:
           )
           PY
           echo "official_control_done=1" >> "$GITHUB_OUTPUT"
-          # Surface control outcome in job summary artifact; do not invent energy.
-          {
-            echo "official_raw_exit=$RAW"
-            echo "official_idv0_exit=$IDV"
-            echo -n "has_energy_raw="; cat ci-spps-job/official_control/has_energy_raw.txt
-            echo -n "has_energy_idv0="; cat ci-spps-job/official_control/has_energy_idv0.txt
-          } | tee ci-spps-job/official_control/summary.txt
 
       - name: check-env + attempt-run fixture
         env:
