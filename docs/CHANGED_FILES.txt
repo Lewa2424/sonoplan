@@ -161,3 +161,5 @@ engine/scripts/patch-tetramesh-idvolume.py
 engine/patches/0002-spps-link-all-tetras-within-rayon.patch
 .github/workflows/build-spps.yml
 .github/workflows/spps-official-smoke.yml
+docs/engine/BLOCKER-headless-spps-punctual-energy-zero.md
+docs/commits/README.md
