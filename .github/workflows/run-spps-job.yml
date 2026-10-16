@@ -104,9 +104,11 @@ jobs:
             exit 0
           fi
           chmod +x "$FOUND"
+          # Absolute path: later steps use working-directory engine/adapter.
+          ABS="$(cd "$(dirname "$FOUND")" && pwd)/$(basename "$FOUND")"
           echo "found=1" >> "$GITHUB_OUTPUT"
-          echo "path=$FOUND" >> "$GITHUB_OUTPUT"
-          sha256sum "$FOUND" | tee ci-spps-job/sha256.txt
+          echo "path=$ABS" >> "$GITHUB_OUTPUT"
+          sha256sum "$ABS" | tee ci-spps-job/sha256.txt
 
       - name: Verify checksum when present
         if: steps.bin.outputs.found == '1' && steps.pin.outputs.checksum != ''
