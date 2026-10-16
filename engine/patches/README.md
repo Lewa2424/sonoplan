@@ -5,8 +5,9 @@
 - Минимальный diff; каждый `.patch` с записью: причина, до/после на fixtures, численное влияние.
 - Не менять эталоны ради зелёных тестов.
 - Сохранять лицензионные уведомления upstream.
-- **Источник истины применения:** `engine/scripts/apply-spps-patches.py` (string fallback).
-  Файлы `*.patch` — документирующие; `git apply` может падать, fallback обязателен.
+- **Источник истины применения:** `engine/scripts/apply-spps-patches.py` (string transforms).
+  Файлы `*.patch` — документирующие; скрипт **не** вызывает `git apply` (старый
+  marker в `0001` давал `redefinition of sonoplan_spps_patch` при совместном apply).
 
 ## Активные правки (`apply-spps-patches.py`, маркер `sonoplan-deposit-all-recp-v3`)
 

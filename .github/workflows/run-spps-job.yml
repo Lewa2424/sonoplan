@@ -8,6 +8,10 @@ name: Run SPPS Job
 
 "on":
   workflow_dispatch:
+  # After a successful Build SPPS: use the fresh artifact (pin may lag).
+  workflow_run:
+    workflows: ["Build SPPS"]
+    types: [completed]
   push:
     paths:
       - "engine/adapter/**"
@@ -26,6 +30,9 @@ concurrency:
 jobs:
   attempt-fixture:
     name: Adapter + SPPS fixture attempt (ubuntu-22.04)
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
@@ -76,6 +83,7 @@ jobs:
           cat "$IN/ORIGIN.txt"
 
       - name: Download SPPS artifact (gh)
+        id: dl
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -83,16 +91,39 @@ jobs:
           RUN_ID="${{ steps.pin.outputs.run_id }}"
           ART="${{ steps.pin.outputs.artifact }}"
           DEST="engine/binaries/spps-ci"
-          if [[ -n "$RUN_ID" ]]; then
+          MARKER="sonoplan-deposit-all-recp-v3"
+          USED_LATEST=0
+          # Prefer the Build SPPS run that triggered us (workflow_run).
+          TRIGGER_RUN="${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || '' }}"
+          if [[ -n "$TRIGGER_RUN" ]]; then
+            echo "workflow_run trigger: downloading Build SPPS run $TRIGGER_RUN"
+            rm -rf "$DEST"
+            mkdir -p "$DEST"
+            gh run download "$TRIGGER_RUN" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+            USED_LATEST=1
+          elif [[ -n "$RUN_ID" ]]; then
             gh run download "$RUN_ID" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
           fi
-          if ! find "$DEST" -type f -name spps | grep -q .; then
-            echo "Pinned run download missed; trying latest successful Build SPPS run…"
+          SPPS_FILE=$(find "$DEST" -type f -name spps 2>/dev/null | head -n1 || true)
+          need_latest=0
+          if [[ -z "$SPPS_FILE" ]]; then
+            need_latest=1
+            echo "Pinned/trigger download missed; need latest successful Build SPPS"
+          elif ! grep -a -F -q "$MARKER" "$SPPS_FILE"; then
+            need_latest=1
+            USED_LATEST=1
+            echo "Binary missing marker $MARKER; refreshing from latest Build SPPS"
+            rm -rf "$DEST"
+            mkdir -p "$DEST"
+          fi
+          if [[ "$need_latest" -eq 1 ]]; then
             LATEST=$(gh run list --repo "${{ github.repository }}" --workflow build-spps.yml --status success --limit 1 --json databaseId -q '.[0].databaseId' || true)
             if [[ -n "$LATEST" && "$LATEST" != "null" ]]; then
               gh run download "$LATEST" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+              USED_LATEST=1
             fi
           fi
+          echo "used_latest=$USED_LATEST" >> "$GITHUB_OUTPUT"
 
       - name: Locate SPPS binary
         id: bin
@@ -111,9 +142,15 @@ jobs:
           echo "found=1" >> "$GITHUB_OUTPUT"
           echo "path=$ABS" >> "$GITHUB_OUTPUT"
           sha256sum "$ABS" | tee ci-spps-job/sha256.txt
+          MARKER="sonoplan-deposit-all-recp-v3"
+          if grep -a -F -q "$MARKER" "$ABS"; then
+            echo "OK: patch marker present in binary"
+          else
+            echo "WARN: patch marker $MARKER absent — pin likely stale" | tee ci-spps-job/marker_missing.txt
+          fi
 
       - name: Verify checksum when present
-        if: steps.bin.outputs.found == '1' && steps.pin.outputs.checksum != ''
+        if: steps.bin.outputs.found == '1' && steps.pin.outputs.checksum != '' && steps.dl.outputs.used_latest != '1'
         run: |
           set -euo pipefail
           ACTUAL=$(sha256sum "${{ steps.bin.outputs.path }}" | awk '{print $1}')
