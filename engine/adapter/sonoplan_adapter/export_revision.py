@@ -95,6 +95,31 @@ def _is_axis_aligned_rectangle(
     return True
 
 
+def _absorption_by_band_from_snapshot(
+    snapshot: dict[str, Any],
+) -> dict[str, float]:
+    """Map bandHz → α from room material; empty → caller uses default."""
+    rooms = snapshot.get("rooms") or []
+    materials = snapshot.get("materials") or []
+    if not rooms or not materials:
+        return {}
+    mat_id = rooms[0].get("materialVersionId")
+    mat = None
+    for m in materials:
+        if m.get("id") == mat_id:
+            mat = m
+            break
+    if mat is None:
+        mat = materials[0]
+    out: dict[str, float] = {}
+    for band in mat.get("absorptionByBand") or []:
+        hz = int(band.get("bandHz") or 0)
+        alpha = band.get("alpha")
+        if hz and alpha is not None:
+            out[str(hz)] = float(alpha)
+    return out
+
+
 def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Small JSON for GitHub Actions workflow_dispatch input."""
     min_x, min_y, width, depth, height, exact = room_aabb(snapshot)
@@ -118,12 +143,14 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
             }
         )
     workplaces = []
+    coupe_z = 1.5
     for w in snapshot.get("workplaces") or []:
         pos = w.get("position") or {}
         rh = float((w.get("receiverHeightM") or {}).get("value") or 1.5)
         z = float(pos.get("z") or 0)
         # Receiver height above floor if z≈0
         recv_z = z if z > 0.05 else rh
+        coupe_z = recv_z
         workplaces.append(
             {
                 "id": w.get("id"),
@@ -133,6 +160,7 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "z": recv_z,
             }
         )
+    solids = snapshot.get("solids") or []
     return {
         "schemaVersion": "1.0",
         "box": {
@@ -145,6 +173,9 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
         },
         "sources": sources,
         "workplaces": workplaces,
+        "absorptionByBand": _absorption_by_band_from_snapshot(snapshot),
+        "coupeZM": coupe_z,
+        "solidCount": len(solids),
     }
 
 
@@ -160,12 +191,22 @@ def _lw_for_freq(lw_by_band: dict[str, float], freq: int) -> float:
     return float(lw_by_band[str(nearest)])
 
 
-def _bfreq_absorb(absorb: float) -> list[ET.Element]:
+def _alpha_for_freq(absorb_by_band: dict[str, float], freq: int) -> float:
+    if str(freq) in absorb_by_band:
+        return float(absorb_by_band[str(freq)])
+    if not absorb_by_band:
+        return 0.02
+    keys = sorted(int(k) for k in absorb_by_band.keys())
+    nearest = min(keys, key=lambda k: abs(k - freq))
+    return float(absorb_by_band[str(nearest)])
+
+
+def _bfreq_absorb(absorb_by_band: dict[str, float]) -> list[ET.Element]:
     nodes: list[ET.Element] = []
     for freq in FREQS:
         el = ET.Element("bfreq")
         el.set("freq", str(freq))
-        el.set("absorb", _f(absorb))
+        el.set("absorb", _f(_alpha_for_freq(absorb_by_band, freq)))
         el.set("diffusion", "0")
         el.set("loi", "0")
         nodes.append(el)
@@ -251,12 +292,13 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
     }.items():
         atm.set(k, v)
 
+    absorb_by_band = dict(payload.get("absorptionByBand") or {})
     mats = ET.SubElement(root, "surface_absorption_enum")
     ts = ET.SubElement(mats, "type_surface")
     ts.set("id", "0")
     ts.set("resistivite", "100")
     ts.set("side_material", "1")
-    for child in _bfreq_absorb(0.02):
+    for child in _bfreq_absorb(absorb_by_band):
         ts.append(child)
 
     ET.SubElement(root, "subdomains")
@@ -304,7 +346,28 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
             bf.set("freq", str(freq))
             bf.set("db", "-200")
 
-    ET.SubElement(root, "recepteurss")
+    # Horizontal cutting plane at workplace height (honest SPPS surface map path).
+    coupe_z = float(payload.get("coupeZM") or 1.5)
+    coupe_z = min(max(coupe_z, 0.1), height - 0.05)
+    # Cell size: ~0.5 m, capped so grid stays tractable on large rooms.
+    resolution = min(0.5, max(0.25, min(width, depth) / 40.0))
+    recepteurss = ET.SubElement(root, "recepteurss")
+    coupe = ET.SubElement(recepteurss, "recepteur_surfacique_coupe")
+    coupe.set("id", "7001")
+    coupe.set("name", "plan_coupe")
+    # Rectangle A—B—C in SPPS coords (origin at room AABB min).
+    # B = (0,0,z), A = (0,depth,z), C = (width,0,z) → BA along +Y, BC along +X.
+    coupe.set("ax", _f(0.0))
+    coupe.set("ay", _f(depth))
+    coupe.set("az", _f(coupe_z))
+    coupe.set("bx", _f(0.0))
+    coupe.set("by", _f(0.0))
+    coupe.set("bz", _f(coupe_z))
+    coupe.set("cx", _f(width))
+    coupe.set("cy", _f(0.0))
+    coupe.set("cz", _f(coupe_z))
+    coupe.set("resolution", _f(resolution))
+
     return ET.ElementTree(root)
 
 
@@ -356,7 +419,18 @@ def write_spps_workdir(
     notes = [
         "Phase 2A: SPPS box mesh scaled in-place from official cube cbin/mbin to room AABB.",
         f"Box {width:.3g}×{depth:.3g}×{height:.3g} m; sources/workplaces from revision.",
+        "Horizontal coupe plane exported for surface map (rs_cut.csbin) when SPPS writes it.",
     ]
+    if payload.get("absorptionByBand"):
+        notes.append("Surface absorption α from revision materials (estimated catalog OK).")
+    else:
+        notes.append("Surface absorption default α=0.02 (no material on revision).")
+    solid_count = int(payload.get("solidCount") or 0)
+    if solid_count > 0:
+        notes.append(
+            f"{solid_count} solid(s) in model — not in SPPS mesh yet "
+            "(TetGen/encombrement later; not claimed in this run)."
+        )
     if not exact:
         notes.append(
             "Floor contour is not an axis-aligned rectangle — used AABB "

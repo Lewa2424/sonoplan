@@ -156,13 +156,21 @@ def build_result_manifest(
     punctual = list((decoded or {}).get("punctual") or [])
     any_lp = any(p.get("lpDbGlobal") is not None for p in punctual)
     decode_ok = bool((decoded or {}).get("ok"))
-
-    # Surface heatmap is never invented from punctual files.
+    surface = (decoded or {}).get("surface") or None
+    grid = None
     map_available = False
-    if attempt.ok and decode_ok and punctual:
+    if isinstance(surface, dict):
+        grid = surface.get("grid")
+        if isinstance(grid, dict) and grid.get("lpDb"):
+            map_available = any(v is not None for v in (grid.get("lpDb") or []))
+
+    # Surface heatmap only from decoded .csbin — never invented from punctual.
+    if map_available:
+        map_deferred = None
+    elif attempt.ok and decode_ok and punctual:
         map_deferred = (
             "Punctual .recp decoded (energy p^2-homogeneous). "
-            "Surface heatmap deferred until .csbin decode — not published from punctual files."
+            "Surface .csbin missing or empty — map not published from punctual."
         )
     elif attempt.ok:
         map_deferred = (
@@ -170,14 +178,24 @@ def build_result_manifest(
             "map not published."
         )
     else:
-        map_deferred = (
-            "Map deferred: no valid SPPS run (no invented dB)."
-        )
+        map_deferred = "Map deferred: no valid SPPS run (no invented dB)."
 
     quantity = "energy_p2_homogeneous" if punctual else None
     unit = "Pa2_homogeneous" if punctual else None
-    display_quantity = "Lp_dB" if any_lp else None
-    display_unit = "dB" if any_lp else None
+    display_quantity = "Lp_dB" if any_lp or map_available else None
+    display_unit = "dB" if any_lp or map_available else None
+
+    notes = [
+        "Base SPPS does not claim diffraction/interference/modal physics as computed.",
+        "Lw != Lp; .recp stores p^2-homogeneous energy; "
+        "Lp = 10*log10(E*(1/(20e-6 Pa)^2)) after energy sum.",
+        "Zero receiver energy != 0 dB / silence (lpDbGlobal=null).",
+    ]
+    if map_available:
+        notes.append(
+            "Surface map from RSBIN .csbin (coupe/face centroids → grid); "
+            "not interpolating punctual points."
+        )
 
     return {
         "schemaVersion": "1.0",
@@ -188,12 +206,13 @@ def build_result_manifest(
         "unit": unit,
         "displayQuantity": display_quantity,
         "displayUnit": display_unit,
-        "grid": None,
+        "grid": grid,
         "masks": None,
         "artifactPaths": list(attempt.artifact_paths),
         "mapAvailable": map_available,
         "mapDeferredReason": map_deferred,
         "punctualReceivers": punctual,
+        "surface": surface,
         "decode": decoded,
         "sci003Golden": {
             "status": "decoder_ok_golden_pending",
@@ -203,12 +222,7 @@ def build_result_manifest(
                 "not yet recorded; do not invent reference Lp."
             ),
         },
-        "notes": [
-            "Base SPPS does not claim diffraction/interference/modal physics as computed.",
-            "Lw != Lp; .recp stores p^2-homogeneous energy; "
-            "Lp = 10*log10(E*(1/(20e-6 Pa)^2)) after energy sum.",
-            "Zero receiver energy != 0 dB / silence (lpDbGlobal=null).",
-        ],
+        "notes": notes,
         "attempt": attempt.to_dict(),
     }
 

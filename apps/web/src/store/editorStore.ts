@@ -16,13 +16,19 @@ import {
   patchDraft,
   validateRevision,
 } from "../api/projectsApi";
+import type { SolidKind } from "../model/equipmentCatalog";
 import {
   createDefaultWorkshopRoom,
+  createEquipmentSourceAt,
   createOfflineDraft,
+  createSolidAt,
   createSourceAt,
   createWorkplaceAt,
+  ensureRoomMaterial,
   parseDraftBody,
+  workplaceNearEquipment,
 } from "../model/factoryModel";
+import { createMaterialVersionFromCatalog } from "../model/materialCatalog";
 import {
   contourVertexAngles,
   ensureClosedContour,
@@ -47,7 +53,22 @@ export type Selection =
   | { kind: "room"; id: string }
   | { kind: "source"; id: string }
   | { kind: "workplace"; id: string }
+  | { kind: "solid"; id: string }
   | null;
+
+/** Карта сечения SPPS (не интерполяция punctual). */
+export interface PlanSurfaceMapOverlay {
+  readonly jobId: string;
+  readonly revisionId: string;
+  readonly zM: number;
+  readonly originX: number;
+  readonly originY: number;
+  readonly cellSizeM: number;
+  readonly nx: number;
+  readonly ny: number;
+  /** row-major; null = нет энергии (не 0 дБ). */
+  readonly lpDb: readonly (number | null)[];
+}
 
 interface LastRevisionInfo {
   revisionId: string;
@@ -76,6 +97,10 @@ interface EditorState {
   validationIssues: ValidationIssue[];
   lastRevision: LastRevisionInfo | null;
   planLpOverlay: PlanLpOverlay | null;
+  planSurfaceMap: PlanSurfaceMapOverlay | null;
+  pendingEquipmentKey: string | null;
+  pendingSolidKind: SolidKind | null;
+  placeWithWorkplace: boolean;
   roomWidthM: number;
   roomDepthM: number;
   roomHeightM: number;
@@ -97,10 +122,17 @@ interface EditorState {
   updateRoomVertex: (index: number, x: number, y: number) => void;
   addSource: (x: number, y: number) => void;
   addWorkplace: (x: number, y: number) => void;
+  addEquipmentAt: (x: number, y: number, catalogKey: string) => void;
+  addSolidAt: (x: number, y: number, kind: SolidKind) => void;
+  setPendingEquipment: (catalogKey: string | null) => void;
+  setPendingSolid: (kind: SolidKind | null) => void;
+  setPlaceWithWorkplace: (v: boolean) => void;
+  setRoomMaterial: (catalogKey: string) => void;
   updateSelectedName: (name: string) => void;
   updateSourceLw: (levelDb: number) => void;
   updateSourcePosition: (x: number, y: number, z: number) => void;
   updateWorkplacePosition: (x: number, y: number, z: number) => void;
+  updateSolidHeight: (heightM: number) => void;
   moveSelectedBy: (dx: number, dy: number) => void;
   runValidate: () => Promise<void>;
   commitRevision: () => Promise<void>;
@@ -108,6 +140,7 @@ interface EditorState {
   reloadDraft: () => Promise<void>;
   markDirty: () => void;
   setPlanLpOverlay: (overlay: PlanLpOverlay | null) => void;
+  setPlanSurfaceMap: (overlay: PlanSurfaceMapOverlay | null) => void;
   /**
    * Map punctual receivers (order) → workplaces (order).
    * Honest for fixture_replay: same numbers as CI table, assigned by index.
@@ -121,6 +154,21 @@ interface EditorState {
       receiverId?: string | null;
     }[];
   }) => void;
+  applySurfaceMapFromManifest: (args: {
+    jobId: string;
+    revisionId: string;
+    grid: {
+      originX: number;
+      originY: number;
+      cellSizeM: number;
+      nx: number;
+      ny: number;
+      zM?: number;
+      lpDb: readonly (number | null)[];
+    };
+  }) => void;
+  /** Lp на плане устарели относительно черновика / другой ревизии. */
+  isPlanResultStale: () => boolean;
 }
 
 const initialModel = createOfflineDraft("Новый цех").model;
@@ -183,6 +231,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   validationIssues: [],
   lastRevision: null,
   planLpOverlay: null,
+  planSurfaceMap: null,
+  pendingEquipmentKey: null,
+  pendingSolidKind: null,
+  placeWithWorkplace: true,
   roomWidthM: 20,
   roomDepthM: 12,
   roomHeightM: 6,
@@ -202,6 +254,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       validationIssues: [],
       lastRevision: null,
       planLpOverlay: null,
+      planSurfaceMap: null,
+      pendingEquipmentKey: null,
+      pendingSolidKind: null,
+      placeWithWorkplace: true,
       roomWidthM: 20,
       roomDepthM: 12,
       roomHeightM: 6,
@@ -225,6 +281,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       validationIssues: [],
       lastRevision: null,
       planLpOverlay: null,
+      planSurfaceMap: null,
+      pendingEquipmentKey: null,
+      pendingSolidKind: null,
+      placeWithWorkplace: true,
       roomWidthM: 20,
       roomDepthM: 12,
       roomHeightM: 6,
@@ -240,6 +300,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (model.rooms.length === 0) {
         model = { ...model, rooms: [createDefaultWorkshopRoom()] };
       }
+      model = ensureRoomMaterial(model);
       const room = model.rooms[0];
       set({
         connectionMode: "online",
@@ -255,6 +316,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         validationIssues: [],
         lastRevision: null,
         planLpOverlay: null,
+        planSurfaceMap: null,
+        pendingEquipmentKey: null,
+        pendingSolidKind: null,
         roomHeightM: room?.heightM.value ?? 6,
       });
     } catch (err) {
@@ -432,6 +496,80 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().markDirty();
   },
 
+  addEquipmentAt: (x, y, catalogKey) => {
+    const { model, placeWithWorkplace } = get();
+    const z = roomCenter(model).z;
+    const source = createEquipmentSourceAt(x, y, z, catalogKey);
+    let workplaces = [...model.workplaces];
+    if (placeWithWorkplace) {
+      workplaces = [...workplaces, workplaceNearEquipment(x, y, catalogKey)];
+    }
+    const next = {
+      ...model,
+      sources: [...model.sources, source],
+      workplaces,
+    };
+    set({
+      model: next,
+      selection: { kind: "source", id: source.id },
+      toolMode: "select",
+      pendingEquipmentKey: null,
+    });
+    get().markDirty();
+  },
+
+  addSolidAt: (x, y, kind) => {
+    const { model } = get();
+    const solid = createSolidAt(x, y, kind);
+    const next = { ...model, solids: [...model.solids, solid] };
+    set({
+      model: next,
+      selection: { kind: "solid", id: solid.id },
+      toolMode: "select",
+      pendingSolidKind: null,
+    });
+    get().markDirty();
+  },
+
+  setPendingEquipment: (catalogKey) =>
+    set({
+      pendingEquipmentKey: catalogKey,
+      pendingSolidKind: null,
+      toolMode: "select",
+    }),
+
+  setPendingSolid: (kind) =>
+    set({
+      pendingSolidKind: kind,
+      pendingEquipmentKey: null,
+      toolMode: "select",
+    }),
+
+  setPlaceWithWorkplace: (v) => set({ placeWithWorkplace: v }),
+
+  setRoomMaterial: (catalogKey) => {
+    const { model } = get();
+    const room = model.rooms[0];
+    if (!room) return;
+    const mat = createMaterialVersionFromCatalog(catalogKey);
+    const next = {
+      ...model,
+      materials: [
+        mat,
+        ...model.materials.filter((m) => m.id !== room.materialVersionId),
+      ],
+      rooms: [
+        {
+          ...room,
+          materialVersionId: mat.id,
+          materialNullReason: null,
+        },
+      ],
+    };
+    set({ model: next });
+    get().markDirty();
+  },
+
   updateSelectedName: (name) => {
     const { selection, model } = get();
     if (!selection) return;
@@ -450,6 +588,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           ...model,
           workplaces: model.workplaces.map((w) =>
             w.id === selection.id ? { ...w, name } : w,
+          ),
+        },
+      });
+    } else if (selection.kind === "solid") {
+      set({
+        model: {
+          ...model,
+          solids: model.solids.map((s) =>
+            s.id === selection.id ? { ...s, name } : s,
           ),
         },
       });
@@ -508,6 +655,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().markDirty();
   },
 
+  updateSolidHeight: (heightM) => {
+    const { selection, model } = get();
+    if (!selection || selection.kind !== "solid") return;
+    set({
+      model: {
+        ...model,
+        solids: model.solids.map((s) =>
+          s.id === selection.id
+            ? { ...s, heightM: { value: heightM, unit: "m" } }
+            : s,
+        ),
+      },
+    });
+    get().markDirty();
+  },
+
   moveSelectedBy: (dx, dy) => {
     const { selection, model, toolMode } = get();
     if (toolMode !== "move" || !selection) return;
@@ -545,6 +708,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                   },
                 }
               : w,
+          ),
+        },
+      });
+      get().markDirty();
+    } else if (selection.kind === "solid") {
+      set({
+        model: {
+          ...model,
+          solids: model.solids.map((s) =>
+            s.id === selection.id
+              ? {
+                  ...s,
+                  floorContour: s.floorContour.map((p) => ({
+                    x: p.x + dx,
+                    y: p.y + dy,
+                  })),
+                }
+              : s,
           ),
         },
       });
@@ -661,7 +842,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           snapshotHash: rev.snapshotHash,
         },
         planLpOverlay: null,
-        syncMessage: `Ревизия ${rev.revisionId.slice(0, 8)}… snapshotHash=${rev.snapshotHash.slice(0, 12)}…`,
+        planSurfaceMap: null,
+        syncMessage: `Ревизия зафиксирована (${rev.revisionId.slice(0, 8)}…)`,
       });
     } catch (err) {
       set({
@@ -673,6 +855,39 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setPlanLpOverlay: (overlay) => set({ planLpOverlay: overlay }),
+  setPlanSurfaceMap: (overlay) => set({ planSurfaceMap: overlay }),
+
+  isPlanResultStale: () => {
+    const { planLpOverlay, planSurfaceMap, lastRevision, syncStatus } = get();
+    if (syncStatus === "dirty" || syncStatus === "saving") {
+      return Boolean(planLpOverlay || planSurfaceMap);
+    }
+    const revId = lastRevision?.revisionId;
+    if (!revId) return Boolean(planLpOverlay || planSurfaceMap);
+    if (planLpOverlay && planLpOverlay.revisionId !== revId) return true;
+    if (planSurfaceMap && planSurfaceMap.revisionId !== revId) return true;
+    return false;
+  },
+
+  applySurfaceMapFromManifest: ({ jobId, revisionId, grid }) => {
+    if (grid.nx < 1 || grid.ny < 1 || grid.lpDb.length < grid.nx * grid.ny) {
+      set({ planSurfaceMap: null });
+      return;
+    }
+    set({
+      planSurfaceMap: {
+        jobId,
+        revisionId,
+        zM: grid.zM ?? 1.5,
+        originX: grid.originX,
+        originY: grid.originY,
+        cellSizeM: grid.cellSizeM,
+        nx: grid.nx,
+        ny: grid.ny,
+        lpDb: [...grid.lpDb],
+      },
+    });
+  },
 
   applyPunctualLpToWorkplaces: ({
     jobId,

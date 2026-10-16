@@ -55,7 +55,23 @@ def _rect_snapshot(*, w: float = 20.0, d: float = 12.0, h: float = 6.0) -> dict:
 
 class ExportRevisionTests(unittest.TestCase):
     def test_compact_payload_rectangle(self) -> None:
-        p = compact_export_payload(_rect_snapshot())
+        snap = _rect_snapshot()
+        snap["materials"] = [
+            {
+                "id": "m1",
+                "catalogKey": "mineral_wool",
+                "name": "Минвата",
+                "version": "mvp-1",
+                "estimated": True,
+                "absorptionByBand": [
+                    {"bandHz": 1000, "alpha": 0.7},
+                    {"bandHz": 500, "alpha": 0.6},
+                ],
+            }
+        ]
+        snap["rooms"][0]["materialVersionId"] = "m1"
+        snap["solids"] = [{"id": "s1", "name": "Стеллаж"}]
+        p = compact_export_payload(snap)
         self.assertTrue(p["box"]["exactRectangle"])
         self.assertAlmostEqual(p["box"]["widthM"], 20.0)
         self.assertAlmostEqual(p["box"]["depthM"], 12.0)
@@ -63,6 +79,9 @@ class ExportRevisionTests(unittest.TestCase):
         self.assertEqual(len(p["sources"]), 1)
         self.assertEqual(len(p["workplaces"]), 1)
         self.assertAlmostEqual(p["workplaces"][0]["z"], 1.5)
+        self.assertAlmostEqual(p["absorptionByBand"]["1000"], 0.7)
+        self.assertEqual(p["solidCount"], 1)
+        self.assertIn("coupeZM", p)
 
     def test_write_workdir_scales_mesh(self) -> None:
         root = Path(__file__).resolve().parents[2]
@@ -87,6 +106,8 @@ class ExportRevisionTests(unittest.TestCase):
             cfg = (out / "config.xml").read_text(encoding="utf-8")
             self.assertIn('name="Fan"', cfg)
             self.assertIn("RM-1", cfg)
+            self.assertIn("recepteur_surfacique_coupe", cfg)
+            self.assertIn('name="plan_coupe"', cfg)
             # In-place scale must preserve non-coordinate fixture bytes
             orig = (fixture / "mesh.cbin").read_bytes()
             scaled = (out / "mesh.cbin").read_bytes()

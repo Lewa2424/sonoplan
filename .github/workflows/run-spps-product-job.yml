@@ -292,11 +292,12 @@ jobs:
               man["exportMeta"] = meta
           man["notes"] = notes
           man["executionMode"] = "github_actions_spps"
-          man["mapAvailable"] = False
+          # Keep mapAvailable from decode (csbin); never invent a map here.
           man_path.write_text(json.dumps(man, indent=2), encoding="utf-8")
           punctual = man.get("punctualReceivers") or []
           any_lp = any(p.get("lpDbGlobal") is not None for p in punctual)
-          if ok and any_lp:
+          map_ok = bool(man.get("mapAvailable"))
+          if ok and (any_lp or map_ok):
               status = {
                   "status": "completed",
                   "errorCode": None,

@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from "react";
-import { Stage, Layer, Line, Circle, Text, Group } from "react-konva";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Stage, Layer, Line, Circle, Text, Group, Image as KonvaImage } from "react-konva";
 import type Konva from "konva";
 import { stripClosingDuplicate } from "@sonoplan/domain";
 import { useElementSize } from "../hooks/useElementSize";
+import { ru } from "../i18n/ru";
 import {
   contourAngleLabelPositions,
   contourBounds,
@@ -13,6 +14,7 @@ import {
   openPolylineCornerAngleDeg,
   POLYGON_CLOSE_SNAP_M,
 } from "../model/contourHelpers";
+import { surfaceMapToDataUrl } from "../model/lpPalette";
 import { useEditorStore } from "../store/editorStore";
 
 const STAGE_PAD = 24;
@@ -74,15 +76,23 @@ export function PlanCanvas(_props: PlanCanvasProps) {
   const updateRoomVertex = useEditorStore((s) => s.updateRoomVertex);
   const addSource = useEditorStore((s) => s.addSource);
   const addWorkplace = useEditorStore((s) => s.addWorkplace);
+  const addEquipmentAt = useEditorStore((s) => s.addEquipmentAt);
+  const addSolidAt = useEditorStore((s) => s.addSolidAt);
+  const pendingEquipmentKey = useEditorStore((s) => s.pendingEquipmentKey);
+  const pendingSolidKind = useEditorStore((s) => s.pendingSolidKind);
   const updateSourcePosition = useEditorStore((s) => s.updateSourcePosition);
   const updateWorkplacePosition = useEditorStore(
     (s) => s.updateWorkplacePosition,
   );
+  const moveSelectedBy = useEditorStore((s) => s.moveSelectedBy);
   const planLpOverlay = useEditorStore((s) => s.planLpOverlay);
+  const planSurfaceMap = useEditorStore((s) => s.planSurfaceMap);
+  const isPlanResultStale = useEditorStore((s) => s.isPlanResultStale);
 
   const [placeMode, setPlaceMode] = useState<"none" | "source" | "workplace">(
     "none",
   );
+  const [heatmapImg, setHeatmapImg] = useState<HTMLImageElement | null>(null);
   /** Absolute angle labels (inside perimeter) — neighbors only while dragging. */
   const roomLabelRefs = useRef<(Konva.Text | null)[]>([]);
   const draftLabelRefs = useRef<(Konva.Text | null)[]>([]);
@@ -189,8 +199,30 @@ export function PlanCanvas(_props: PlanCanvasProps) {
   };
 
   const room = model.rooms[0];
+  const placingCatalog =
+    pendingEquipmentKey !== null || pendingSolidKind !== null;
   const passClicksToStage =
-    toolMode === "drawPolygon" || placeMode !== "none";
+    toolMode === "drawPolygon" || placeMode !== "none" || placingCatalog;
+  const stale = isPlanResultStale();
+
+  const heatmapUrl = useMemo(() => {
+    if (!planSurfaceMap || stale) return null;
+    return surfaceMapToDataUrl({
+      nx: planSurfaceMap.nx,
+      ny: planSurfaceMap.ny,
+      lpDb: planSurfaceMap.lpDb,
+    });
+  }, [planSurfaceMap, stale]);
+
+  useEffect(() => {
+    if (!heatmapUrl) {
+      setHeatmapImg(null);
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => setHeatmapImg(img);
+    img.src = heatmapUrl;
+  }, [heatmapUrl]);
 
   const bounds = useMemo(() => {
     if (!room) {
@@ -299,6 +331,14 @@ export function PlanCanvas(_props: PlanCanvasProps) {
       addPolygonVertex(p.x, p.y);
       return;
     }
+    if (pendingEquipmentKey) {
+      addEquipmentAt(p.x, p.y, pendingEquipmentKey);
+      return;
+    }
+    if (pendingSolidKind) {
+      addSolidAt(p.x, p.y, pendingSolidKind);
+      return;
+    }
     if (placeMode === "source") {
       addSource(p.x, p.y);
       setPlaceMode("none");
@@ -361,16 +401,22 @@ export function PlanCanvas(_props: PlanCanvasProps) {
         </button>
         {(placeMode !== "none" ||
           toolMode === "drawPolygon" ||
-          toolMode === "move") && (
+          toolMode === "move" ||
+          placingCatalog) && (
           <span className="plan-place-hint">
             {toolMode === "drawPolygon"
               ? "Каснитесь — вершина; у 1-й точки — замыкание; тяните — углы соседей"
               : toolMode === "move"
-                ? "Тяните источник (Lw) или РМ пальцем"
-                : "Каснитесь плана"}
+                ? "Тяните объект пальцем"
+                : placingCatalog
+                  ? "Каснитесь плана — разместить"
+                  : "Каснитесь плана"}
           </span>
         )}
       </div>
+      {stale && (planLpOverlay || planSurfaceMap) ? (
+        <p className="banner banner--warn">{ru.model.staleLp}</p>
+      ) : null}
       <div className="plan-stage-host" ref={stageHostRef}>
       <Stage
         width={width}
@@ -402,6 +448,66 @@ export function PlanCanvas(_props: PlanCanvasProps) {
               }}
             />
           )}
+          {heatmapImg && planSurfaceMap && !stale ? (
+            <KonvaImage
+              image={heatmapImg}
+              x={
+                transform.offsetX + planSurfaceMap.originX * transform.scale
+              }
+              y={
+                transform.offsetY -
+                (planSurfaceMap.originY +
+                  planSurfaceMap.ny * planSurfaceMap.cellSizeM) *
+                  transform.scale
+              }
+              width={planSurfaceMap.nx * planSurfaceMap.cellSizeM * transform.scale}
+              height={
+                planSurfaceMap.ny * planSurfaceMap.cellSizeM * transform.scale
+              }
+              listening={false}
+              opacity={0.85}
+            />
+          ) : null}
+          {toolMode !== "drawPolygon" &&
+            model.solids.map((solid) => {
+              const pts = contourToFlatPoints(
+                solid.floorContour,
+                transform.scale,
+                transform.offsetX,
+                transform.offsetY,
+              );
+              const selected =
+                selection?.kind === "solid" && selection.id === solid.id;
+              return (
+                <Line
+                  key={solid.id}
+                  points={pts}
+                  closed
+                  fill={selected ? "rgba(90, 101, 117, 0.45)" : "rgba(90, 101, 117, 0.28)"}
+                  stroke={selected ? "#1a2332" : "#5a6575"}
+                  strokeWidth={selected ? 2 : 1}
+                  listening={!passClicksToStage}
+                  onClick={(e) => {
+                    e.cancelBubble = true;
+                    setSelection({ kind: "solid", id: solid.id });
+                  }}
+                  onTap={(e) => {
+                    e.cancelBubble = true;
+                    setSelection({ kind: "solid", id: solid.id });
+                  }}
+                  draggable={toolMode === "move" && !passClicksToStage}
+                  onDragEnd={(e) => {
+                    e.cancelBubble = true;
+                    const node = e.target;
+                    const dx = node.x() / transform.scale;
+                    const dy = -node.y() / transform.scale;
+                    node.position({ x: 0, y: 0 });
+                    setSelection({ kind: "solid", id: solid.id });
+                    moveSelectedBy(dx, dy);
+                  }}
+                />
+              );
+            })}
           {toolMode !== "drawPolygon" &&
             roomUnique.map((v, i) => {
               const sx = transform.offsetX + v.x * transform.scale;
@@ -630,7 +736,9 @@ export function PlanCanvas(_props: PlanCanvasProps) {
                 selection?.kind === "workplace" && selection.id === wp.id;
               const cx = transform.offsetX + wp.position.x * transform.scale;
               const cy = transform.offsetY - wp.position.y * transform.scale;
-              const lp = planLpOverlay?.byWorkplaceId[wp.id];
+              const lp = stale
+                ? undefined
+                : planLpOverlay?.byWorkplaceId[wp.id];
               const lpLabel =
                 typeof lp === "number" && Number.isFinite(lp)
                   ? `${lp.toFixed(1)} дБ`

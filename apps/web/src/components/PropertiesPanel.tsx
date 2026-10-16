@@ -2,8 +2,11 @@ import {
   contourVertexAngles,
   formatAngleDeg,
 } from "../model/contourHelpers";
-import { useEditorStore } from "../store/editorStore";
+import { EQUIPMENT_CATALOG, SOLID_CATALOG } from "../model/equipmentCatalog";
+import { MATERIAL_CATALOG } from "../model/materialCatalog";
 import { STANDARD_BANDS_HZ } from "../model/factoryModel";
+import { ru } from "../i18n/ru";
+import { useEditorStore } from "../store/editorStore";
 
 export function PropertiesPanel() {
   const selection = useEditorStore((s) => s.selection);
@@ -20,18 +23,110 @@ export function PropertiesPanel() {
   const updateWorkplacePosition = useEditorStore(
     (s) => s.updateWorkplacePosition,
   );
+  const updateSolidHeight = useEditorStore((s) => s.updateSolidHeight);
+  const setRoomMaterial = useEditorStore((s) => s.setRoomMaterial);
+  const setPendingEquipment = useEditorStore((s) => s.setPendingEquipment);
+  const setPendingSolid = useEditorStore((s) => s.setPendingSolid);
+  const pendingEquipmentKey = useEditorStore((s) => s.pendingEquipmentKey);
+  const pendingSolidKind = useEditorStore((s) => s.pendingSolidKind);
+  const placeWithWorkplace = useEditorStore((s) => s.placeWithWorkplace);
+  const setPlaceWithWorkplace = useEditorStore((s) => s.setPlaceWithWorkplace);
   const markDirty = useEditorStore((s) => s.markDirty);
+
+  const room = model.rooms[0];
+  const activeMat =
+    room?.materialVersionId != null
+      ? model.materials.find((m) => m.id === room.materialVersionId)
+      : null;
+
+  const coatingsBlock = (
+    <div className="props-block">
+      <h4 className="props-subtitle">{ru.model.coatings}</h4>
+      <p className="props-meta">{ru.model.coatingsHint}</p>
+      <label className="field">
+        <span>Материал ограждений</span>
+        <select
+          value={activeMat?.catalogKey ?? "concrete"}
+          onChange={(e) => setRoomMaterial(e.target.value)}
+        >
+          {MATERIAL_CATALOG.map((m) => (
+            <option key={m.catalogKey} value={m.catalogKey}>
+              {m.nameRu}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
+  );
+
+  const placeBlock = (
+    <div className="props-block">
+      <h4 className="props-subtitle">{ru.model.equipment}</h4>
+      <label className="field field--check">
+        <input
+          type="checkbox"
+          checked={placeWithWorkplace}
+          onChange={(e) => setPlaceWithWorkplace(e.target.checked)}
+        />
+        <span>{ru.model.placeWorkplaceNear}</span>
+      </label>
+      <div className="props-chip-row">
+        {EQUIPMENT_CATALOG.map((eq) => (
+          <button
+            key={eq.catalogKey}
+            type="button"
+            className={
+              pendingEquipmentKey === eq.catalogKey
+                ? "btn btn--active btn--chip"
+                : "btn btn--chip"
+            }
+            onClick={() =>
+              setPendingEquipment(
+                pendingEquipmentKey === eq.catalogKey ? null : eq.catalogKey,
+              )
+            }
+          >
+            {eq.nameRu}
+          </button>
+        ))}
+      </div>
+      <h4 className="props-subtitle">{ru.model.obstacle}</h4>
+      <p className="props-meta">{ru.model.solidsNote}</p>
+      <div className="props-chip-row">
+        {SOLID_CATALOG.map((s) => (
+          <button
+            key={s.kind}
+            type="button"
+            className={
+              pendingSolidKind === s.kind
+                ? "btn btn--active btn--chip"
+                : "btn btn--chip"
+            }
+            onClick={() =>
+              setPendingSolid(pendingSolidKind === s.kind ? null : s.kind)
+            }
+          >
+            {s.nameRu}
+          </button>
+        ))}
+      </div>
+      {(pendingEquipmentKey || pendingSolidKind) && (
+        <p className="plan-place-hint">Каснитесь плана для размещения</p>
+      )}
+    </div>
+  );
 
   if (!selection) {
     return (
       <aside className="props-panel" aria-label="Свойства">
-        <p className="props-empty">Выберите объект на плане</p>
+        <p className="props-empty">Выберите объект или разместите оборудование</p>
+        {coatingsBlock}
+        {placeBlock}
       </aside>
     );
   }
 
   if (selection.kind === "room") {
-    const room = model.rooms.find((r) => r.id === selection.id);
     const angles = room ? contourVertexAngles(room.floorContour) : [];
     return (
       <aside className="props-panel" aria-label="Свойства помещения">
@@ -98,6 +193,8 @@ export function PropertiesPanel() {
         <button type="button" className="btn" onClick={snapRoomRightAngles}>
           Выровнять 90±5°
         </button>
+        {coatingsBlock}
+        {placeBlock}
         <p className="props-meta">
           Вершин контура: {room?.floorContour.length ?? 0} (замкнутый)
         </p>
@@ -121,8 +218,8 @@ export function PropertiesPanel() {
     const lw0 = src.powerSpectrumLw[0]?.level.value ?? 90;
     return (
       <aside className="props-panel" aria-label="Свойства источника">
-        <h3 className="props-title">Источник</h3>
-        <p className="props-badge">quantity: sound_power (Lw), дБ re 1 pW</p>
+        <h3 className="props-title">Оборудование / источник</h3>
+        <p className="props-badge">Lw, дБ re 1 pW · Lw ≠ Lp</p>
         <label className="field">
           <span>Имя</span>
           <input
@@ -177,7 +274,7 @@ export function PropertiesPanel() {
           />
         </label>
         <label className="field">
-          <span>Lw (все полосы), дБ</span>
+          <span>{ru.model.lwTypical}</span>
           <input
             type="number"
             step={1}
@@ -185,9 +282,44 @@ export function PropertiesPanel() {
             onChange={(e) => updateSourceLw(Number(e.target.value))}
           />
         </label>
-        <p className="props-meta">
-          Полосы: {STANDARD_BANDS_HZ.join(", ")} Гц · Lw ≠ Lp
-        </p>
+        <details className="props-details">
+          <summary>{ru.model.spectrumAdvanced}</summary>
+          <p className="props-meta">
+            {STANDARD_BANDS_HZ.join(", ")} Гц — сейчас одинаковый Lw во всех
+            полосах
+          </p>
+        </details>
+        {placeBlock}
+      </aside>
+    );
+  }
+
+  if (selection.kind === "solid") {
+    const solid = model.solids.find((s) => s.id === selection.id);
+    if (!solid) return null;
+    return (
+      <aside className="props-panel" aria-label="Свойства препятствия">
+        <h3 className="props-title">{solid.name}</h3>
+        <p className="props-meta">{ru.model.solidsNote}</p>
+        <label className="field">
+          <span>Имя</span>
+          <input
+            type="text"
+            value={solid.name}
+            onChange={(e) => updateSelectedName(e.target.value)}
+          />
+        </label>
+        <label className="field">
+          <span>Высота, м</span>
+          <input
+            type="number"
+            min={0.1}
+            step={0.1}
+            value={round3(solid.heightM.value ?? 2)}
+            onChange={(e) => updateSolidHeight(Number(e.target.value))}
+          />
+        </label>
+        {placeBlock}
       </aside>
     );
   }
@@ -250,6 +382,7 @@ export function PropertiesPanel() {
           }
         />
       </label>
+      {placeBlock}
     </aside>
   );
 }

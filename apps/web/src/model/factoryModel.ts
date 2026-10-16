@@ -5,10 +5,21 @@ import {
   type OctaveBandLevel,
   type ProjectDraft,
   type Room,
+  type SolidObstacle,
   type Source,
   type Workplace,
 } from "@sonoplan/domain";
 import { rectangleContour } from "./contourHelpers";
+import {
+  createMaterialVersionFromCatalog,
+  materialByKey,
+} from "./materialCatalog";
+import {
+  equipmentByKey,
+  lwSpectrumForEquipment,
+  solidByKind,
+  type SolidKind,
+} from "./equipmentCatalog";
 
 /** Стандартные октавные полосы для упрощённого ввода Lw. */
 export const STANDARD_BANDS_HZ = [
@@ -82,14 +93,103 @@ export function createWorkplaceAt(
   };
 }
 
+export function createEquipmentSourceAt(
+  x: number,
+  y: number,
+  z: number,
+  catalogKey: string,
+): Source {
+  const { name, spectrum } = lwSpectrumForEquipment(catalogKey);
+  return {
+    id: createUuid(),
+    name,
+    position: { x, y, z },
+    powerSpectrumLw: spectrum,
+    directivityId: null,
+    weight: null,
+    weightNullReason: "not_used_mvp",
+  };
+}
+
+/** Прямоугольный solid (стеллаж / шкаф / перегородка) с центром (cx, cy). */
+export function createSolidAt(
+  cx: number,
+  cy: number,
+  kind: SolidKind,
+): SolidObstacle {
+  const cat = solidByKind(kind);
+  const hw = cat.defaultWidthM / 2;
+  const hd = cat.defaultDepthM / 2;
+  return {
+    id: createUuid(),
+    name: cat.nameRu,
+    floorContour: [
+      { x: cx - hw, y: cy - hd },
+      { x: cx + hw, y: cy - hd },
+      { x: cx + hw, y: cy + hd },
+      { x: cx - hw, y: cy + hd },
+      { x: cx - hw, y: cy - hd },
+    ],
+    baseZM: 0,
+    heightM: { value: cat.defaultHeightM, unit: "m" },
+  };
+}
+
+export function createDefaultMaterial(): ReturnType<
+  typeof createMaterialVersionFromCatalog
+> {
+  return createMaterialVersionFromCatalog("concrete");
+}
+
+export function ensureRoomMaterial(
+  model: ModelSnapshot,
+  catalogKey = "concrete",
+): ModelSnapshot {
+  const room = model.rooms[0];
+  if (!room) return model;
+  if (room.materialVersionId && model.materials.length > 0) {
+    return model;
+  }
+  const mat = createMaterialVersionFromCatalog(
+    materialByKey(catalogKey)?.catalogKey ?? "concrete",
+  );
+  return {
+    ...model,
+    materials: [mat, ...model.materials.filter((m) => m.id !== mat.id)],
+    rooms: [
+      {
+        ...room,
+        materialVersionId: mat.id,
+        materialNullReason: null,
+      },
+    ],
+  };
+}
+
+export function workplaceNearEquipment(
+  x: number,
+  y: number,
+  catalogKey: string,
+): Workplace {
+  const entry = equipmentByKey(catalogKey);
+  const offset = entry?.workplaceOffsetM ?? 1.0;
+  return createWorkplaceAt(x + offset, y, 1.5, "Рабочее место");
+}
+
 export function createOfflineDraft(name: string): ProjectDraft {
-  const room = createDefaultWorkshopRoom();
+  const mat = createDefaultMaterial();
+  const room: Room = {
+    ...createDefaultWorkshopRoom(),
+    materialVersionId: mat.id,
+    materialNullReason: null,
+  };
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name,
     model: {
       ...createEmptyModel(),
       rooms: [room],
+      materials: [mat],
     },
   };
 }

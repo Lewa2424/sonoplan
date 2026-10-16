@@ -1,3 +1,6 @@
+import { useNavigate } from "react-router-dom";
+import { useRunCalculation } from "../hooks/useRunCalculation";
+import { ru } from "../i18n/ru";
 import { useEditorStore } from "../store/editorStore";
 
 export function EditorToolbar() {
@@ -8,12 +11,18 @@ export function EditorToolbar() {
   const finishPolygon = useEditorStore((s) => s.finishPolygon);
   const cancelPolygon = useEditorStore((s) => s.cancelPolygon);
   const runValidate = useEditorStore((s) => s.runValidate);
-  const commitRevision = useEditorStore((s) => s.commitRevision);
   const saveDraft = useEditorStore((s) => s.saveDraft);
   const reloadDraft = useEditorStore((s) => s.reloadDraft);
   const syncStatus = useEditorStore((s) => s.syncStatus);
   const connectionMode = useEditorStore((s) => s.connectionMode);
   const polygonDraft = useEditorStore((s) => s.polygonDraft);
+  const navigate = useNavigate();
+  const { reviseAndRun, busy, error } = useRunCalculation();
+
+  const onCalculate = async () => {
+    await reviseAndRun();
+    navigate("/calculations");
+  };
 
   return (
     <div className="editor-toolbar" role="toolbar" aria-label="Инструменты модели">
@@ -43,16 +52,20 @@ export function EditorToolbar() {
             Многоуг.
           </button>
         )}
-        <button type="button" className="btn btn--accent" onClick={() => void runValidate()}>
+        <button
+          type="button"
+          className="btn btn--accent"
+          onClick={() => void runValidate()}
+        >
           Проверить
         </button>
         <button
           type="button"
           className="btn btn--accent"
-          onClick={() => void commitRevision()}
-          disabled={connectionMode !== "online"}
+          onClick={() => void onCalculate()}
+          disabled={connectionMode !== "online" || busy}
         >
-          Ревизия
+          {busy ? ru.calculations.working : ru.model.calculate}
         </button>
         <button
           type="button"
@@ -72,6 +85,7 @@ export function EditorToolbar() {
           </button>
         )}
       </div>
+      {error ? <p className="banner banner--error">{error}</p> : null}
     </div>
   );
 }

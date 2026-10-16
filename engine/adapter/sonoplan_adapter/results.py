@@ -211,11 +211,14 @@ def read_punctual_sound_level(path: Path | str) -> PunctualSoundLevel:
     )
 
 
-def read_surface_csbin(_path: Path) -> None:
-    """Placeholder for surface receiver .csbin decode."""
-    raise BinaryDecodeNotReady(
-        "Surface .csbin decode not implemented yet (ENG-006); no invented heatmap."
-    )
+def read_surface_csbin(path: Path | str):
+    """Decode surface / coupe .csbin (RSBIN). See ``rsbin_io``."""
+    from .rsbin_io import CsbinDecodeError, read_surface_csbin as _read
+
+    try:
+        return _read(path)
+    except CsbinDecodeError as exc:
+        raise RecpDecodeError(str(exc)) from exc
 
 
 @dataclass
@@ -226,6 +229,7 @@ class DecodedWorkdir:
     punctual: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     stats_probe: dict[str, Any] | None = None
+    surface: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -233,11 +237,12 @@ class DecodedWorkdir:
             "punctual": list(self.punctual),
             "errors": list(self.errors),
             "statsProbe": self.stats_probe,
+            "surface": self.surface,
         }
 
 
 def decode_spps_workdir(work_dir: Path) -> DecodedWorkdir:
-    """Find and decode Sound level.recp under Punctual receivers/; probe statsSPPS.gabe."""
+    """Find and decode Sound level.recp + optional surface .csbin; probe stats."""
     work = work_dir.resolve()
     errors: list[str] = []
     punctual: list[dict[str, Any]] = []
@@ -284,6 +289,36 @@ def decode_spps_workdir(work_dir: Path) -> DecodedWorkdir:
         except GabeFormatError as exc:
             errors.append(f"statsSPPS.gabe: {exc}")
 
+    surface: dict[str, Any] | None = None
+    csbin_candidates = [
+        work / "recepteurss" / "rs_cut.csbin",
+        work / "rs_cut.csbin",
+        work / "recepteurss" / "Sound_level.csbin",
+        work / "Sound_level.csbin",
+    ]
+    # Also accept Global/ layout from SauveGlobalRecepteursSurfaciques
+    global_dir = work / "recepteurss" / "Global"
+    if global_dir.is_dir():
+        csbin_candidates.extend(sorted(global_dir.glob("*.csbin")))
+    for csbin in csbin_candidates:
+        if not csbin.is_file():
+            continue
+        try:
+            decoded_s = read_surface_csbin(csbin)
+            surface = decoded_s.to_dict()
+            surface["relativePath"] = str(csbin.relative_to(work)).replace(
+                "\\", "/"
+            )
+            break
+        except (RecpDecodeError, OSError, BinaryDecodeNotReady) as exc:
+            errors.append(f"{csbin}: {exc}")
+
     punctual_errors = [e for e in errors if "Sound level.recp" in e]
     ok = bool(punctual) and not punctual_errors
-    return DecodedWorkdir(ok=ok, punctual=punctual, errors=errors, stats_probe=stats_probe)
+    return DecodedWorkdir(
+        ok=ok,
+        punctual=punctual,
+        errors=errors,
+        stats_probe=stats_probe,
+        surface=surface,
+    )

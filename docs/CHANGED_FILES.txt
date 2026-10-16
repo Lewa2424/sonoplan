@@ -188,3 +188,9 @@ engine/adapter/sonoplan_adapter/cbin_io.py
 engine/adapter/sonoplan_adapter/mbin_io.py
 engine/adapter/sonoplan_adapter/export_revision.py
 engine/adapter/tests/test_export_revision.py
+apps/web/src/model/materialCatalog.ts
+apps/web/src/model/equipmentCatalog.ts
+apps/web/src/model/lpPalette.ts
+apps/web/src/hooks/useRunCalculation.ts
+engine/adapter/sonoplan_adapter/rsbin_io.py
+engine/adapter/tests/test_rsbin_io.py

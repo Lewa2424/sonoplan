@@ -420,13 +420,15 @@ def sync_github_actions_job(db: Session, job: JobRow) -> JobRow:
         # Infer from GH conclusion + punctual.
         if conclusion == "success" and isinstance(result_man, dict):
             punctual = result_man.get("punctualReceivers") or []
-            if any(p.get("lpDbGlobal") is not None for p in punctual):
+            any_lp = any(p.get("lpDbGlobal") is not None for p in punctual)
+            map_ok = bool(result_man.get("mapAvailable"))
+            if any_lp or map_ok:
                 final_status = "completed"
             else:
                 final_status = "failed"
                 status_doc = {
                     "errorCode": "SPPS_ZERO_ENERGY",
-                    "errorMessage": "No confirmed Lp in Actions result manifest",
+                    "errorMessage": "No confirmed Lp or surface map in Actions result manifest",
                 }
         else:
             final_status = "failed"

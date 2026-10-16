@@ -18,6 +18,8 @@
 ### Честность
 
 - Phase 2A: **AABB-коробка** по контуру (прямоугольник — точно; L/многоугольник — оболочка), не полный экструд + TetGen.
+- Материалы: α из `materials` ревизии; горизонтальный `recepteur_surfacique_coupe` → `.csbin` при успехе SPPS (`mapAvailable`).
+- Solids (стеллажи/перегородки) в snapshot, **не** в mesh до TetGen.
 - Без `export_json` — fallback на fixture `minimal_room` (Phase 1).
 - Это не Windows `fixture_replay`: на Actions реально запускается Linux SPPS.
 - `executionMode`: `github_actions_pending` → `github_actions_spps`.

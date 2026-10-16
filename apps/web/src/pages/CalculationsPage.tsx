@@ -36,7 +36,11 @@ export function CalculationsPage() {
   const applyPunctualLpToWorkplaces = useEditorStore(
     (s) => s.applyPunctualLpToWorkplaces,
   );
+  const applySurfaceMapFromManifest = useEditorStore(
+    (s) => s.applySurfaceMapFromManifest,
+  );
   const planLpOverlay = useEditorStore((s) => s.planLpOverlay);
+  const isPlanResultStale = useEditorStore((s) => s.isPlanResultStale);
 
   const [job, setJob] = useState<JobResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,24 +62,64 @@ export function CalculationsPage() {
       if (next.status !== "completed") return;
       const manifest = next.resultManifest;
       const punctual = confirmedReceivers(manifest?.punctualReceivers);
-      if (punctual.length === 0) return;
+      const hasMap = manifest?.mapAvailable === true;
+      if (punctual.length === 0 && !hasMap) return;
       if (appliedJobIdRef.current === next.id) return;
       appliedJobIdRef.current = next.id;
       const mode = manifest?.executionMode;
       const exportMeta = (manifest as { exportMeta?: { mode?: string } } | null)
         ?.exportMeta;
       const usedBoxExport = exportMeta?.mode === "export_box";
-      applyPunctualLpToWorkplaces({
-        jobId: next.id,
-        revisionId: next.revisionId,
-        // Honesty: fixture/demo vs box export from revision AABB.
-        fixtureReplay:
-          mode === "fixture_replay" ||
-          (mode === "github_actions_spps" && !usedBoxExport),
-        punctual,
-      });
+      if (punctual.length > 0) {
+        applyPunctualLpToWorkplaces({
+          jobId: next.id,
+          revisionId: next.revisionId,
+          // Honesty: fixture/demo vs box export from revision AABB.
+          fixtureReplay:
+            mode === "fixture_replay" ||
+            (mode === "github_actions_spps" && !usedBoxExport),
+          punctual,
+        });
+      }
+      const grid = (
+        manifest as {
+          grid?: {
+            originX?: number;
+            originY?: number;
+            cellSizeM?: number;
+            nx?: number;
+            ny?: number;
+            zM?: number;
+            lpDb?: (number | null)[];
+          } | null;
+        } | null
+      )?.grid;
+      if (
+        manifest?.mapAvailable === true &&
+        grid &&
+        typeof grid.originX === "number" &&
+        typeof grid.originY === "number" &&
+        typeof grid.cellSizeM === "number" &&
+        typeof grid.nx === "number" &&
+        typeof grid.ny === "number" &&
+        Array.isArray(grid.lpDb)
+      ) {
+        applySurfaceMapFromManifest({
+          jobId: next.id,
+          revisionId: next.revisionId,
+          grid: {
+            originX: grid.originX,
+            originY: grid.originY,
+            cellSizeM: grid.cellSizeM,
+            nx: grid.nx,
+            ny: grid.ny,
+            zM: grid.zM,
+            lpDb: grid.lpDb,
+          },
+        });
+      }
     },
-    [applyPunctualLpToWorkplaces],
+    [applyPunctualLpToWorkplaces, applySurfaceMapFromManifest],
   );
 
   const refreshJob = useCallback(
@@ -227,9 +271,12 @@ export function CalculationsPage() {
     job.status === "running" ||
     execMode === "github_actions_pending";
 
+  const stale = isPlanResultStale();
   let bannerText: string;
   if (!job) {
     bannerText = ru.calculations.levelsIdle;
+  } else if (stale && (hasLevels || mapAvailable)) {
+    bannerText = ru.calculations.levelsStale;
   } else if (hasLevels) {
     const exportMeta = (
       manifest as { exportMeta?: { mode?: string } } | null
@@ -398,10 +445,13 @@ export function CalculationsPage() {
             <div className="calc-manifest">
               <h3>{ru.calculations.manifestTitle}</h3>
               {mapAvailable ? (
-                <p className="page-meta">
-                  {ru.calculations.artifacts}:{" "}
-                  {(manifest?.artifactPaths ?? []).join(", ") || "—"}
-                </p>
+                <>
+                  <p className="page-meta">{ru.calculations.mapReady}</p>
+                  <p className="page-meta">
+                    {ru.calculations.mapLegend}: &gt;100 красный · 90–100
+                    оранжевый · 80–90 жёлтый · &lt;80 зелёный
+                  </p>
+                </>
               ) : (
                 <>
                   <p className="page-hint">{ru.calculations.mapLater}</p>

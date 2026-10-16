@@ -434,6 +434,52 @@ body {
   color: var(--muted);
 }
 
+.props-block {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.props-subtitle {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.props-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.btn--chip {
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.field--check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field--check input {
+  width: auto;
+}
+
+.props-details {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.banner--warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid #fdba74;
+}
+
 .validation-list {
   list-style: none;
   margin: 0;

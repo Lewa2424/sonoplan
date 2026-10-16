@@ -17,7 +17,6 @@ export function ModelPage() {
   const syncStatus = useEditorStore((s) => s.syncStatus);
   const syncMessage = useEditorStore((s) => s.syncMessage);
   const lastRevision = useEditorStore((s) => s.lastRevision);
-  const etag = useEditorStore((s) => s.etag);
   const model = useEditorStore((s) => s.model);
   const loadOnlineProject = useEditorStore((s) => s.loadOnlineProject);
   const saveDraft = useEditorStore((s) => s.saveDraft);
@@ -72,7 +71,6 @@ export function ModelPage() {
         </div>
         <p className="sync-line" data-status={syncStatus}>
           {syncLabel(syncStatus)}
-          {etag ? ` · ETag ${etag.slice(0, 8)}…` : ""}
         </p>
       </header>
 
@@ -92,9 +90,8 @@ export function ModelPage() {
 
       {lastRevision && (
         <p className="banner banner--ok">
-          Ревизия: {lastRevision.revisionId}
-          <br />
-          snapshotHash: {lastRevision.snapshotHash}
+          Последняя ревизия готова к расчёту (
+          {lastRevision.revisionId.slice(0, 8)}…)
         </p>
       )}
 

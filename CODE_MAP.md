@@ -38,8 +38,10 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `services/api/src/sonoplan_api/job_execution.py` | inline/worker: adapter → fail codes / ResultManifest |
 | `services/api/src/sonoplan_api/github_actions_jobs.py` | Free Linux worker: dispatch + poll Actions artifacts |
 | `.github/workflows/run-spps-product-job.yml` | Product job: live SPPS on ubuntu-22.04 → job artifact |
-| `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: revision → AABB box mesh + config for SPPS |
+| `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box + materials α + coupe plane + sources/РМ |
 | `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube cbin/mbin floats to room box (preserve layout) |
+| `engine/adapter/sonoplan_adapter/rsbin_io.py` | ENG-006: decode surface/coupe `.csbin` → Lp grid (not from punctual) |
+| `apps/web/src/model/materialCatalog.ts` / `equipmentCatalog.ts` | Каталоги покрытий и оборудования (оценочные α / Lw) |
 | `docs/github-actions-worker.md` | Setup PAT / env for Actions backend |
 | `services/api/alembic` | `projects` / `drafts` / `revisions` / **`jobs`** |
 | `services/worker` | Celery `sonoplan.run_calculation` → `execute_job` |
