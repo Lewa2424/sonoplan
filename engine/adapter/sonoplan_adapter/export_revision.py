@@ -28,6 +28,7 @@ REF_CUBE_M = 5.0
 # the walls, so tetras whose plane section touches only wall edges were never
 # linked and got no cut-map energy (wedge-shaped empty zones). Overhang fixes it.
 COUPE_WALL_OVERHANG_M = 0.01
+PROBE_COUPE_XML_ID = 7002
 
 
 @dataclass(frozen=True)
@@ -418,6 +419,24 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
     coupe.set("cy", _f(-m))
     coupe.set("cz", _f(coupe_z))
     coupe.set("resolution", _f(resolution))
+
+    # Diagnostic mirror of plan_coupe (never the plan map): B in the far
+    # corner, BC along −X, BA along −Y. A cell-index bias relative to B shows
+    # up mirrored here; a particle-position bias does not. Drop once the
+    # plan_coupe corner compression (2/3 of room) is explained.
+    probe = ET.SubElement(recepteurss, "recepteur_surfacique_coupe")
+    probe.set("id", str(PROBE_COUPE_XML_ID))
+    probe.set("name", "probe_coupe_mirror")
+    probe.set("ax", _f(width + m))
+    probe.set("ay", _f(-m))
+    probe.set("az", _f(coupe_z))
+    probe.set("bx", _f(width + m))
+    probe.set("by", _f(depth + m))
+    probe.set("bz", _f(coupe_z))
+    probe.set("cx", _f(-m))
+    probe.set("cy", _f(depth + m))
+    probe.set("cz", _f(coupe_z))
+    probe.set("resolution", _f(resolution))
 
     return ET.ElementTree(root)
 

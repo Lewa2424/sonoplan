@@ -32,8 +32,32 @@ class SurfaceFaceEnergy:
 
 
 @dataclass
+class SurfaceReceiverBlock:
+    """One recepteur surfacique inside the RSBIN file (faces share ``nodes``)."""
+
+    xml_index: int
+    name: str
+    faces: list[SurfaceFaceEnergy]
+    grid: dict[str, Any] | None
+    layout: dict[str, Any] | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "xmlIndex": self.xml_index,
+            "name": self.name,
+            "faceCount": len(self.faces),
+            "grid": self.grid,
+            "layout": self.layout,
+        }
+
+
+@dataclass
 class SurfaceCsbin:
-    """Decoded surface / coupe receiver file."""
+    """Decoded surface / coupe receiver file.
+
+    ``faces`` / ``grid`` / ``receiver_name`` describe the first receiver
+    (export writes the plan coupe first); ``receivers`` lists all of them.
+    """
 
     path: str
     record_type: int
@@ -44,6 +68,7 @@ class SurfaceCsbin:
     receiver_name: str
     # Regular grid for plan heatmap (may be empty if faces cannot be binned).
     grid: dict[str, Any] | None = None
+    receivers: list[SurfaceReceiverBlock] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -55,6 +80,7 @@ class SurfaceCsbin:
             "nodeCount": len(self.nodes),
             "faceCount": len(self.faces),
             "grid": self.grid,
+            "receivers": [r.to_dict() for r in (self.receivers or [])],
             "notes": [
                 "RSBIN energy is p^2-homogeneous; Lp after energy sum.",
                 "Zero face energy → lpDb=null (not 0 dB).",
@@ -83,8 +109,13 @@ def write_synthetic_csbin(
     faces: list[tuple[int, int, int, float]],
     receiver_name: str = "plan_coupe",
     time_step_s: float = 5e-4,
+    extra_receivers: tuple[tuple[int, str, list[tuple[int, int, int, float]]], ...] = (),
 ) -> None:
-    """Write a minimal VERSION=3 RSBIN for unit tests (not from SPPS)."""
+    """Write a minimal VERSION=3 RSBIN for unit tests (not from SPPS).
+
+    Zero-energy faces get ``nbRecords=0`` like SPPS.
+    """
+    receivers = ((7001, receiver_name, faces), *extra_receivers)
     buf = bytearray()
     buf += struct.pack(
         _HEADER_FMT,
@@ -95,21 +126,25 @@ def write_synthetic_csbin(
         _FACE_SIZE,
         _FACE_VALUE_SIZE,
         len(nodes),
-        1,  # quantRS
+        len(receivers),
         1,  # nbTimeStep
         float(time_step_s),
         0,  # SPL_STANDART
     )
     for x, y, z in nodes:
         buf += struct.pack("<fff", float(x), float(y), float(z))
-    name = receiver_name.encode("ascii", errors="replace")[:255]
-    name_field = bytearray(_REC_S_SIZE - 8)
-    name_field[: len(name)] = name
-    buf += struct.pack("<ii", 7001, len(faces))
-    buf += bytes(name_field)
-    for a, b, c, energy in faces:
-        buf += struct.pack("<iiii", int(a), int(b), int(c), 1)
-        buf += struct.pack("<Hxxf", 0, float(energy))
+    for xml_index, rec_name, rec_faces in receivers:
+        name = rec_name.encode("ascii", errors="replace")[:255]
+        name_field = bytearray(_REC_S_SIZE - 8)
+        name_field[: len(name)] = name
+        buf += struct.pack("<ii", int(xml_index), len(rec_faces))
+        buf += bytes(name_field)
+        for a, b, c, energy in rec_faces:
+            if energy > 0:
+                buf += struct.pack("<iiii", int(a), int(b), int(c), 1)
+                buf += struct.pack("<Hxxf", 0, float(energy))
+            else:
+                buf += struct.pack("<iiii", int(a), int(b), int(c), 0)
     path.write_bytes(bytes(buf))
 
 
@@ -142,8 +177,7 @@ def read_surface_csbin(path: Path | str) -> SurfaceCsbin:
         nodes.append((x, y, z))
         off += node_len
 
-    faces_out: list[SurfaceFaceEnergy] = []
-    receiver_name = ""
+    blocks: list[SurfaceReceiverBlock] = []
     for _rs in range(quant_rs):
         if off + rec_len > len(data):
             raise CsbinDecodeError("truncated recepteurS")
@@ -153,6 +187,7 @@ def read_surface_csbin(path: Path | str) -> SurfaceCsbin:
             "ascii", errors="replace"
         )
         off += rec_len
+        faces_out: list[SurfaceFaceEnergy] = []
         for _f in range(quant_faces):
             if off + face_len > len(data):
                 raise CsbinDecodeError("truncated face")
@@ -175,18 +210,75 @@ def read_surface_csbin(path: Path | str) -> SurfaceCsbin:
                     lp_db=energy_sum_to_lp(energy_sum),
                 )
             )
+        blocks.append(
+            SurfaceReceiverBlock(
+                xml_index=int(xml_index),
+                name=receiver_name or "surface",
+                faces=faces_out,
+                grid=_faces_to_grid(nodes, faces_out),
+                layout=_coupe_index_layout(faces_out),
+            )
+        )
 
-    grid = _faces_to_grid(nodes, faces_out)
+    main = blocks[0] if blocks else None
     return SurfaceCsbin(
         path=str(p),
         record_type=int(record_type),
         time_step_s=float(time_step),
         nb_time_step=int(nb_time_step),
         nodes=nodes,
-        faces=faces_out,
-        receiver_name=receiver_name or "surface",
-        grid=grid,
+        faces=list(main.faces) if main else [],
+        receiver_name=main.name if main else "surface",
+        grid=main.grid if main else None,
+        receivers=blocks,
     )
+
+
+def _coupe_index_layout(faces: list[SurfaceFaceEnergy]) -> dict[str, Any] | None:
+    """Energized cell extents in SPPS write order (no node coordinates used).
+
+    SauveRecepteursSurfaciquesCoupe writes face ``2*(col + row*nbcols)`` with
+    vertex ``b = base + col + row*(nbcols+1)`` and ``c = b + nbcols + 1``.
+    Cross-checks the coordinate-based grid against the raw SPPS cell index.
+    """
+    if len(faces) < 2 or len(faces) % 2:
+        return None
+    nb_cols = faces[0].c - faces[0].b - 1
+    if nb_cols < 1 or (len(faces) // 2) % nb_cols:
+        return None
+    nb_rows = (len(faces) // 2) // nb_cols
+    rows: list[int] = []
+    cols: list[int] = []
+    for k in range(0, len(faces), 2):
+        if faces[k].energy_sum > 0 and math.isfinite(faces[k].energy_sum):
+            cell = k // 2
+            rows.append(cell // nb_cols)
+            cols.append(cell % nb_cols)
+    if not rows:
+        return {"nbRows": nb_rows, "nbCols": nb_cols, "energizedCells": 0}
+    return {
+        "nbRows": nb_rows,
+        "nbCols": nb_cols,
+        "energizedCells": len(rows),
+        "energizedRowMin": min(rows),
+        "energizedRowMax": max(rows),
+        "energizedColMin": min(cols),
+        "energizedColMax": max(cols),
+    }
+
+
+def grid_energy_span(grid: dict[str, Any]) -> tuple[float, float]:
+    """Fraction of the grid width/height covered by filled cells (bbox)."""
+    nx = int(grid.get("nx") or 0)
+    ny = int(grid.get("ny") or 0)
+    lp = list(grid.get("lpDb") or [])
+    if nx < 1 or ny < 1 or len(lp) < nx * ny:
+        return 0.0, 0.0
+    xs = [k % nx for k in range(nx * ny) if lp[k] is not None]
+    ys = [k // nx for k in range(nx * ny) if lp[k] is not None]
+    if not xs:
+        return 0.0, 0.0
+    return (max(xs) - min(xs) + 1) / nx, (max(ys) - min(ys) + 1) / ny
 
 
 def _faces_to_grid(
@@ -219,8 +311,14 @@ def _faces_to_grid(
         return None
 
     # Node lattice = true coupe cell pitch (not triangle-centroid pitch).
-    node_xs = sorted({round(n[0], 5) for n in nodes})
-    node_ys = sorted({round(n[1], 5) for n in nodes})
+    # Several receivers share one node table — use only this receiver's nodes.
+    own = [
+        nodes[i]
+        for i in sorted({i for f in faces for i in (f.a, f.b, f.c)})
+        if 0 <= i < len(nodes)
+    ]
+    node_xs = sorted({round(n[0], 5) for n in own})
+    node_ys = sorted({round(n[1], 5) for n in own})
     use_lattice = len(node_xs) >= 2 and len(node_ys) >= 2
     if use_lattice:
         dxs = [node_xs[i + 1] - node_xs[i] for i in range(len(node_xs) - 1)]

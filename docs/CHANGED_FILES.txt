@@ -199,3 +199,5 @@ engine/adapter/tests/test_rsbin_io.py
 engine/adapter/tests/test_csbin_path_slash.py
 packages/domain/src/diffuseFieldEstimate.ts
 packages/domain/src/diffuseFieldEstimate.test.ts
+apps/web/src/model/surfaceMapValidity.ts
+apps/web/src/model/surfaceMapValidity.test.ts

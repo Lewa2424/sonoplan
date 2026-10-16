@@ -32,6 +32,7 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `apps/web/src/api` | fetch-клиент `/api/v1`, ETag/If-Match, jobs |
 | `apps/web/src/pages/CalculationsPage.tsx` | job + polling; таблица punctual Lp (дБ); карта поверхности отложена |
 | `apps/web/src/store/editorStore.ts` | Zustand: модель, selection, sync, validate, revision |
+| `apps/web/src/model/surfaceMapValidity.ts` | Правдоподобие сетки SPPS (заполнение ≥45 %, охват ≥90 %); иначе карта скрыта |
 | `packages/domain` | Типы; координаты; геометрия; `computeSnapshotHash`; `validateModel` |
 | `packages/domain/src/diffuseFieldEstimate.ts` | Предварительная оценка Lp по формуле помещения (OPT-010), не SPPS; слой «Оценка» на плане |
 | `packages/contracts` | `schemas/project.schema.json`, `openapi/openapi.yaml`, `SCHEMA_VERSION` |

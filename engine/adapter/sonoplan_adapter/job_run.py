@@ -18,6 +18,7 @@ from .env import (
     fixture_inputs_ready,
 )
 from .results import decode_spps_workdir
+from .rsbin_io import grid_energy_span
 from .runner import run_spps
 
 
@@ -160,21 +161,42 @@ def build_result_manifest(
     grid = None
     map_available = False
     map_fill_ratio = 0.0
+    map_span = (0.0, 0.0)
     # Sparse/diagonal blotches (e.g. coplanar sources) must not ship as a "map".
     _MIN_MAP_FILL = 0.45
+    # The coupe overhangs every wall of a closed room, so reverberant energy
+    # must reach its far edges; a corner-only patch is a broken recording.
+    _MIN_MAP_SPAN = 0.9
     if isinstance(surface, dict):
         cand = surface.get("grid")
         if isinstance(cand, dict) and cand.get("lpDb"):
             lp_cells = list(cand.get("lpDb") or [])
             filled = sum(1 for v in lp_cells if v is not None)
             map_fill_ratio = (filled / len(lp_cells)) if lp_cells else 0.0
-            if filled > 0 and map_fill_ratio >= _MIN_MAP_FILL:
+            map_span = grid_energy_span(cand)
+            if (
+                filled > 0
+                and map_fill_ratio >= _MIN_MAP_FILL
+                and min(map_span) >= _MIN_MAP_SPAN
+            ):
                 grid = cand
                 map_available = True
 
     # Surface heatmap only from decoded .csbin — never invented from punctual.
     if map_available:
         map_deferred = None
+    elif (
+        attempt.ok
+        and decode_ok
+        and punctual
+        and map_fill_ratio >= _MIN_MAP_FILL
+        and min(map_span) < _MIN_MAP_SPAN
+    ):
+        map_deferred = (
+            f"Surface grid covers only {map_span[0]:.0%}×{map_span[1]:.0%} "
+            f"of the coupe (need ≥{_MIN_MAP_SPAN:.0%}) — map not published "
+            "(SPPS cut-plane cells inconsistent with a closed room)."
+        )
     elif attempt.ok and decode_ok and punctual and map_fill_ratio > 0:
         map_deferred = (
             f"Surface grid fill {map_fill_ratio:.0%} below {_MIN_MAP_FILL:.0%} "

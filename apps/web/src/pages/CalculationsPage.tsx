@@ -7,6 +7,7 @@ import {
   computeLpScale,
   formatLpScaleLegend,
 } from "../model/lpPalette";
+import { surfaceGridRejectReason } from "../model/surfaceMapValidity";
 import { useEditorStore } from "../store/editorStore";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
@@ -301,7 +302,20 @@ export function CalculationsPage() {
   };
 
   const manifest = job?.resultManifest ?? null;
-  const mapAvailable = manifest?.mapAvailable === true;
+  const manifestGrid = (
+    manifest as {
+      grid?: { nx?: number; ny?: number; lpDb?: (number | null)[] } | null;
+    } | null
+  )?.grid;
+  const mapRejectReason =
+    manifest?.mapAvailable === true
+      ? surfaceGridRejectReason({
+          nx: manifestGrid?.nx ?? 0,
+          ny: manifestGrid?.ny ?? 0,
+          lpDb: manifestGrid?.lpDb ?? [],
+        })
+      : null;
+  const mapAvailable = manifest?.mapAvailable === true && mapRejectReason === null;
   const punctual = confirmedReceivers(manifest?.punctualReceivers);
   const hasLevels = punctual.length > 0;
   const execMode = manifest?.executionMode;
@@ -507,6 +521,10 @@ export function CalculationsPage() {
                   </p>
                   <p className="page-hint">{ru.calculations.mapLegendHint}</p>
                 </>
+              ) : mapRejectReason ? (
+                <p className="page-hint">
+                  {ru.calculations.mapHidden[mapRejectReason]}
+                </p>
               ) : (
                 <>
                   <p className="page-hint">{ru.calculations.mapLater}</p>

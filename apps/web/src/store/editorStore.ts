@@ -29,6 +29,7 @@ import {
   workplaceNearEquipment,
 } from "../model/factoryModel";
 import { createMaterialVersionFromCatalog } from "../model/materialCatalog";
+import { surfaceGridRejectReason } from "../model/surfaceMapValidity";
 import {
   contourVertexAngles,
   ensureClosedContour,
@@ -881,13 +882,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   applySurfaceMapFromManifest: ({ jobId, revisionId, grid }) => {
-    if (grid.nx < 1 || grid.ny < 1 || grid.lpDb.length < grid.nx * grid.ny) {
-      set({ planSurfaceMap: null });
-      return;
-    }
-    // Do not paint sparse blotches (legacy jobs / coplanar coupe).
-    const filled = grid.lpDb.filter((v) => v !== null && v !== undefined).length;
-    if (filled / grid.lpDb.length < 0.45) {
+    if (surfaceGridRejectReason(grid) !== null) {
       set({ planSurfaceMap: null });
       return;
     }

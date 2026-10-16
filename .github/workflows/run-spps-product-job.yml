@@ -304,6 +304,12 @@ jobs:
               man["exportMeta"] = meta
           man["notes"] = notes
           man["executionMode"] = "github_actions_spps"
+          # decode-outputs builds a fresh attempt without SPPS output; keep a tail.
+          if attempt.get("stdout_tail") or attempt.get("stderr_tail"):
+              man["sppsLog"] = {
+                  "stdoutTail": (attempt.get("stdout_tail") or "")[-6000:],
+                  "stderrTail": (attempt.get("stderr_tail") or "")[-6000:],
+              }
           # Keep mapAvailable from decode (csbin); never invent a map here.
           man_path.write_text(json.dumps(man, indent=2), encoding="utf-8")
           punctual = man.get("punctualReceivers") or []

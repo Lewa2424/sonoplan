@@ -119,5 +119,131 @@ class RsbinIoTests(unittest.TestCase):
             self.assertIsNone(man.get("mapDeferredReason"))
 
 
+def _spps_coupe(
+    *, base: int, nb_rows: int, nb_cols: int, energy: dict[tuple[int, int], float]
+) -> list[tuple[int, int, int, float]]:
+    """Faces in SauveRecepteursSurfaciquesCoupe order (two per cell)."""
+    nvc = nb_cols + 1
+    faces: list[tuple[int, int, int, float]] = []
+    for row in range(nb_rows):
+        for col in range(nb_cols):
+            e = energy.get((row, col), 0.0)
+            a = base + col + 1 + row * nvc
+            b = base + col + row * nvc
+            c = base + col + (row + 1) * nvc
+            d = base + col + 1 + (row + 1) * nvc
+            faces.append((a, b, c, e))
+            faces.append((a, c, d, e))
+    return faces
+
+
+def _spps_nodes(
+    *, b: tuple[float, float], step_u: tuple[float, float], step_v: tuple[float, float],
+    nb_rows: int, nb_cols: int, z: float = 1.9,
+) -> list[tuple[float, float, float]]:
+    nodes = []
+    for row in range(nb_rows + 1):
+        for col in range(nb_cols + 1):
+            nodes.append(
+                (
+                    b[0] + step_u[0] * row + step_v[0] * col,
+                    b[1] + step_u[1] * row + step_v[1] * col,
+                    z,
+                )
+            )
+    return nodes
+
+
+class MultiReceiverCoupeTests(unittest.TestCase):
+    def test_plan_and_mirror_probe_decode_independently(self) -> None:
+        rows, cols = 4, 3
+        main_nodes = _spps_nodes(
+            b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0), nb_rows=rows, nb_cols=cols
+        )
+        # Mirror: B at (4,3), BC along −X, BA along −Y.
+        probe_nodes = _spps_nodes(
+            b=(4.0, 3.0), step_u=(-1.0, 0.0), step_v=(0.0, -1.0), nb_rows=rows, nb_cols=cols
+        )
+        main_faces = _spps_coupe(base=0, nb_rows=rows, nb_cols=cols, energy={(3, 2): 1e-2})
+        probe_faces = _spps_coupe(
+            base=len(main_nodes), nb_rows=rows, nb_cols=cols, energy={(0, 0): 1e-2}
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rs_cut.csbin"
+            write_synthetic_csbin(
+                path,
+                nodes=main_nodes + probe_nodes,
+                faces=main_faces,
+                extra_receivers=((7002, "probe_coupe_mirror", probe_faces),),
+            )
+            decoded = read_surface_csbin(path)
+        self.assertEqual(decoded.receiver_name, "plan_coupe")
+        self.assertEqual(len(decoded.faces), rows * cols * 2)
+        receivers = decoded.receivers or []
+        self.assertEqual([r.xml_index for r in receivers], [7001, 7002])
+        for rec in receivers:
+            grid = rec.grid
+            assert grid is not None
+            self.assertEqual((grid["nx"], grid["ny"]), (rows, cols))
+            filled = [k for k, v in enumerate(grid["lpDb"]) if v is not None]
+            # Main row 3/col 2 and mirror row 0/col 0 are the same world cell.
+            self.assertEqual(filled, [2 * rows + 3])
+        self.assertEqual(
+            receivers[0].layout,
+            {
+                "nbRows": rows,
+                "nbCols": cols,
+                "energizedCells": 1,
+                "energizedRowMin": 3,
+                "energizedRowMax": 3,
+                "energizedColMin": 2,
+                "energizedColMax": 2,
+            },
+        )
+        assert receivers[1].layout is not None
+        self.assertEqual(receivers[1].layout["energizedRowMax"], 0)
+        self.assertEqual(decoded.grid, receivers[0].grid)
+
+
+class CoupeSpanGateTests(unittest.TestCase):
+    def _manifest_for(self, energy: dict[tuple[int, int], float]) -> dict:
+        rows, cols = 9, 6
+        nodes = _spps_nodes(
+            b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0), nb_rows=rows, nb_cols=cols
+        )
+        faces = _spps_coupe(base=0, nb_rows=rows, nb_cols=cols, energy=energy)
+        punctual = [{"receiverId": "wp", "lpDbGlobal": 90.0}]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rs_cut.csbin"
+            write_synthetic_csbin(path, nodes=nodes, faces=faces)
+            surface = read_surface_csbin(path).to_dict()
+        return build_result_manifest(
+            job_id="j",
+            revision_id="r",
+            snapshot_hash="0" * 64,
+            attempt=CalculationAttempt(ok=True, work_dir="w"),
+            decoded={"ok": True, "punctual": punctual, "surface": surface},
+        )
+
+    def test_corner_only_patch_is_not_published(self) -> None:
+        # Shape of job 6aed4c64: dense patch from the B corner, far edges empty
+        # (65% fill passes the sparse gate; 78%×83% span does not).
+        man = self._manifest_for(
+            {(r, c): 1e-2 for r in range(7) for c in range(5)}
+        )
+        self.assertFalse(man["mapAvailable"])
+        self.assertIsNone(man["grid"])
+        self.assertIn("covers only", man["mapDeferredReason"])
+        # Raw grid stays in the manifest for diagnosis, not as the plan map.
+        self.assertIsNotNone(man["surface"]["grid"])
+
+    def test_full_coverage_is_published(self) -> None:
+        man = self._manifest_for(
+            {(r, c): 1e-2 for r in range(9) for c in range(6)}
+        )
+        self.assertTrue(man["mapAvailable"])
+        self.assertIsNotNone(man["grid"])
+
+
 if __name__ == "__main__":
     unittest.main()
