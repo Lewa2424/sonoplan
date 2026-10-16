@@ -4,17 +4,29 @@
 Do NOT undefine UTILISER_MAILLAGE_OPTIMISATION: the upstream #ifndef path does
 not compile against the current core types (doInvertNormal / percCollision).
 
-CI zero-energy: punctual deposit gated on tetra links; cdt_vol only set when
-indexTetra is valid; unused static markers stripped by -O2. This script:
+Root cause of CI energySumGlobal=0 (verified on official control + minimal_room):
 
-1. Links every tetra within rayon+10 (smoke 6-tetra cube).
-2. Always sets cdt_vol = (c·ρ)/V_sphere for every punctual receiver.
-3. Deposits against the full recepteur_p_List.
-4. Embeds a used .rodata marker; build-spps-native.sh fails if absent in binary.
+1. Under UTILISER, FreeParticleTranslation only calls ParticuleFreeTranslation
+   when ``currentTetra->linkedRecepteurP`` is set — end-tetra deposits miss when
+   linking is incomplete on the 6-tetra smoke cube.
+2. ParticuleFreeTranslation only walked that link list (not all receivers).
+3. ``cdt_vol`` is only set when ``indexTetra`` is valid in Expand; on miss,
+   save writes ``energy_sum * cdt_vol`` → zeros on disk even if energy accumulated.
+4. Unused ``static const`` markers are stripped by -O2 / gc-sections.
+
+This script (string transforms only — do NOT git-apply documenting ``*.patch``):
+
+1. Always set ``cdt_vol = (c·ρ)/V_sphere`` for every punctual receiver.
+2. Link every tetra within rayon+10 (belt-and-suspenders).
+3. Deposit against the full ``recepteur_p_List``.
+4. Always call ParticuleFreeTranslation under UTILISER (drop link gate).
+5. Embed a ``__attribute__((used))`` marker touched from the UTILISER path;
+   ``build-spps-native.sh`` fails if the marker is absent in the binary.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -68,6 +80,21 @@ _NEW_DEPOSIT = """	// SonoPlan: deposit against ALL punctual receivers (tetra li
 		{
 			t_Recepteur_P* currentRecp=recpList->at(idrecp);"""
 
+# UTILISER FreeParticleTranslation: drop end-tetra link gate (compiled path).
+_OLD_UTILISER_CALL = (
+    "\tif(configurationP.currentTetra->linkedRecepteurP)\n"
+    "\t\treportTool->ParticuleFreeTranslation("
+    "configurationP,configurationP.position+translationVector);"
+)
+
+_NEW_UTILISER_CALL = (
+    "\t// SonoPlan: always deposit under UTILISER (link gate skipped energy on smoke meshes).\n"
+    "\tsonoplan_spps_touch_marker();\n"
+    "\tif(configurationP.currentTetra)\n"
+    "\t\treportTool->ParticuleFreeTranslation("
+    "configurationP,configurationP.position+translationVector);"
+)
+
 
 def _link_and_cdt(src: Path) -> None:
     target = src / "src" / "spps" / "sppsInitialisation.cpp"
@@ -76,8 +103,6 @@ def _link_and_cdt(src: Path) -> None:
         print(f"expand-cdt-link: already applied in {target}")
         return
 
-    # Cut from first RecursiveTetraTest call through CheckSourcePosition.
-    # Works on clean upstream and after partial 0002 link-only patch.
     anchor = (
         "RecursiveTetraTest(lstRecepteurP->at(idrecp), rayonRecepteurP, "
         "recpTetra->voisins[idVoisin], tetraMesh);"
@@ -89,11 +114,7 @@ def _link_and_cdt(src: Path) -> None:
             f"expand-cdt-link: ExpandPunctual/CheckSourcePosition anchors missing in {target}"
         )
 
-    # Keep upstream RecursiveTetraTest + the three closing braces of the
-    # idVoisin / if(indexTetra) / for(idrecp) loops (not the function `}`).
     mid = text[a:b]
-    # After RecursiveTetraTest block: "\n\t\t\t}\n\t\t}\n\t}\n" then optional
-    # SonoPlan link block then "}\n\n".
     upstream_close = "\n\t\t\t}\n\t\t}\n\t}"
     c = mid.find(upstream_close)
     if c < 0:
@@ -121,9 +142,23 @@ def _deposit_all_receivers(src: Path) -> None:
     print(f"deposit-all-recp: applied in {target}")
 
 
-def _embed_marker(src: Path) -> None:
-    import re
+def _ungate_utiliser_deposit(src: Path) -> None:
+    """Always call ParticuleFreeTranslation on the UTILISER (compiled) path."""
+    target = src / "src" / "spps" / "CalculationCore.cpp"
+    text = target.read_text(encoding="utf-8", errors="replace")
+    if "SonoPlan: always deposit under UTILISER" in text:
+        print(f"utiliser-ungate: already applied in {target}")
+        return
+    if _OLD_UTILISER_CALL not in text:
+        raise SystemExit(
+            f"utiliser-ungate: linkedRecepteurP call gate not found in {target}"
+        )
+    text = text.replace(_OLD_UTILISER_CALL, _NEW_UTILISER_CALL, 1)
+    target.write_text(text, encoding="utf-8", newline="\n")
+    print(f"utiliser-ungate: applied in {target}")
 
+
+def _embed_marker(src: Path) -> None:
     target = src / "src" / "spps" / "CalculationCore.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
     # Drop any prior marker symbols (old .patch or previous apply).
@@ -137,37 +172,48 @@ def _embed_marker(src: Path) -> None:
         "",
         text,
     )
-    text = re.sub(r"\tsonoplan_spps_touch_marker\(\);\n", "", text)
+    # Keep SonoPlan ungating comment/call; only strip orphaned touch lines that
+    # are not part of our ungating block (idempotent re-apply).
+    text = re.sub(
+        r"(?<!UTILISER \(link gate skipped energy on smoke meshes\)\.\n)"
+        r"\tsonoplan_spps_touch_marker\(\);\n",
+        "",
+        text,
+    )
+    # Simpler: remove ALL touch calls then re-insert via ungating (already done).
+    text = text.replace("\tsonoplan_spps_touch_marker();\n", "")
+
     needle = '#include "CalculationCore.h"'
     if needle not in text:
         raise SystemExit(f"patch-marker: include missing in {target}")
-    if f'"{MARKER}"' not in text:
-        blob = (
-            needle
-            + "\n"
-            + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
-            + "static void sonoplan_spps_touch_marker(void) "
-            + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
+    blob = (
+        needle
+        + "\n"
+        + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
+        + "static void sonoplan_spps_touch_marker(void) "
+        + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
+    )
+    text = text.replace(needle, blob, 1)
+
+    # Re-apply UTILISER ungating with touch (was stripped above if present).
+    if "SonoPlan: always deposit under UTILISER" not in text:
+        if _OLD_UTILISER_CALL not in text:
+            raise SystemExit(
+                "patch-marker: UTILISER deposit gate missing after marker scrub"
+            )
+        text = text.replace(_OLD_UTILISER_CALL, _NEW_UTILISER_CALL, 1)
+    elif "sonoplan_spps_touch_marker();" not in text:
+        text = text.replace(
+            "\t// SonoPlan: always deposit under UTILISER "
+            "(link gate skipped energy on smoke meshes).\n"
+            "\tif(configurationP.currentTetra)\n",
+            "\t// SonoPlan: always deposit under UTILISER "
+            "(link gate skipped energy on smoke meshes).\n"
+            "\tsonoplan_spps_touch_marker();\n"
+            "\tif(configurationP.currentTetra)\n",
+            1,
         )
-        text = text.replace(needle, blob, 1)
-    util_ft = (
-        "void CalculationCore::FreeParticleTranslation"
-        "(CONF_PARTICULE &configurationP,const vec3 &translationVector)\n"
-        "{\n"
-        "\treportTool->ParticuleFreeTranslation"
-    )
-    util_ft_new = (
-        "void CalculationCore::FreeParticleTranslation"
-        "(CONF_PARTICULE &configurationP,const vec3 &translationVector)\n"
-        "{\n"
-        "\tsonoplan_spps_touch_marker();\n"
-        "\treportTool->ParticuleFreeTranslation"
-    )
-    if "sonoplan_spps_touch_marker();" not in text:
-        idx = text.rfind(util_ft)
-        if idx < 0:
-            raise SystemExit("patch-marker: UTILISER FreeParticleTranslation not found")
-        text = text[:idx] + util_ft_new + text[idx + len(util_ft) :]
+
     target.write_text(text, encoding="utf-8", newline="\n")
     print(f"patch-marker: embedded {MARKER} in {target}")
 
@@ -182,14 +228,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not an I-Simpa tree: {src}", file=sys.stderr)
         return 1
 
-    # Documenting engine/patches/*.patch are not applied here: outdated marker
-    # patches conflict with string fallbacks (redefinition of sonoplan_spps_patch).
-    # Source of truth: the three string transforms below.
+    # Documenting engine/patches/*.patch are NOT applied: outdated markers clash
+    # with string fallbacks (redefinition of sonoplan_spps_patch).
     for patch in sorted(PATCH_DIR.glob("*.patch")):
         print(f"skip git apply {patch.name} (string fallbacks are authoritative)")
 
     _link_and_cdt(src)
     _deposit_all_receivers(src)
+    _ungate_utiliser_deposit(src)
     _embed_marker(src)
 
     init = (src / "src" / "spps" / "sppsInitialisation.cpp").read_text(encoding="utf-8")
@@ -203,12 +249,19 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("ERROR: patch marker missing after apply")
     if "SonoPlan: deposit against ALL punctual receivers" not in report:
         raise SystemExit("ERROR: deposit-all-recp missing after apply")
+    if "SonoPlan: always deposit under UTILISER" not in core:
+        raise SystemExit("ERROR: utiliser-ungate missing after apply")
+    if "sonoplan_spps_touch_marker();" not in core:
+        raise SystemExit("ERROR: marker touch missing from UTILISER path")
     types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
     if "#define UTILISER_MAILLAGE_OPTIMISATION" not in types:
         raise SystemExit(
             "ERROR: UTILISER must stay defined (ifndef path does not compile)"
         )
-    print(f"SPPS patches OK (marker={MARKER}, UTILISER kept, deposit-all+cdt_vol)")
+    print(
+        f"SPPS patches OK (marker={MARKER}, UTILISER kept, "
+        "deposit-all+cdt_vol+utiliser-ungate)"
+    )
     return 0
 
 

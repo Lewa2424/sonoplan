@@ -30,7 +30,10 @@
 1. Всегда итерировать `recepteur_p_List` при депозите (link — опционально).
 2. Всегда задавать `cdt_vol=(c·ρ)/V_sphere` для каждого punctual receiver.
 3. Дополнительно линковать тетраэдры в `rayon+10`.
-4. Маркер `__attribute__((used))` + вызов из UTILISER `FreeParticleTranslation`;
+4. **Снять gate** в UTILISER `FreeParticleTranslation`: всегда вызывать
+   `ParticuleFreeTranslation` (раньше вызов шёл только при ненулевом
+   `linkedRecepteurP` на end-tetra — депозит не вызывался).
+5. Маркер `__attribute__((used))` + `sonoplan_spps_touch_marker()` на UTILISER-пути;
    `build-spps-native.sh` **падает**, если `grep -a` не находит маркер в `spps`.
 
 **UTILISER:** оставляем `#define` — ветка `#ifndef` не компилируется.

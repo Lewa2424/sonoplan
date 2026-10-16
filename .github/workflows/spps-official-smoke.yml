@@ -57,12 +57,14 @@ jobs:
           chmod +x engine/scripts/fetch-isimpa.sh engine/scripts/build-spps-native.sh
           ./engine/scripts/build-spps-native.sh
 
-      - name: Prepare output dir
+      - name: Prepare output dir + verify patch marker
         run: |
           set -euo pipefail
           mkdir -p ci-official-smoke
           test -x engine/dist/spps || { echo "BUILD_FAIL: spps missing"; exit 1; }
-          echo "BUILD_OK (experimental patches paused)"
+          grep -a -F 'sonoplan-deposit-all-recp-v3' engine/dist/spps \
+            || { echo "BUILD_FAIL: patch marker missing in spps binary"; exit 1; }
+          echo "BUILD_OK marker present"
           sha256sum engine/dist/spps | tee ci-official-smoke/sha256.txt
 
       - name: Prepare official I-Simpa control (literal assets)
@@ -194,6 +196,14 @@ jobs:
               flag.write_text("0\n", encoding="utf-8")
               print("STILL_ZERO energySumGlobal=0 lpDb=null")
           PY
+
+      - name: Require nonzero punctual energy
+        run: |
+          set -euo pipefail
+          test -f ci-official-smoke/HAS_ENERGY.txt
+          test "$(cat ci-official-smoke/HAS_ENERGY.txt | tr -d '[:space:]')" = "1" \
+            || { echo "FAIL: energySumGlobal=0 on official control — do not invent dB"; exit 1; }
+          echo "OK: official control has energySumGlobal>0"
 
       - name: Job summary
         if: always()
