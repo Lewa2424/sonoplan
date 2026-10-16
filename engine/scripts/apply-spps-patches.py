@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Apply SonoPlan SPPS source patches to a checked-out I-Simpa tree.
 
-Prefers ``git apply`` for ``engine/patches/*.patch``. Falls back to an exact
-string replace for the known UTILISER deposit fix when the hunk context
-cannot match (e.g. CRLF / line-number drift).
+1. Disable UTILISER_MAILLAGE_OPTIMISATION so FreeParticleTranslation uses the
+   non-optimised path that always calls ParticuleFreeTranslation (deposit).
+2. Rewrite the UTILISER FreeParticleTranslation body to deposit on the *start*
+   tetra before navigation (safe if UTILISER is re-enabled later).
+3. Expand punctual-receiver↔tetra links to every tetra near the receiver
+   sphere (6-tetra cube left CI with wall hits but zero .recp energy).
+4. Embed a .rodata marker so CI can prove the patched binary was shipped.
 """
 
 from __future__ import annotations
@@ -14,8 +18,15 @@ from pathlib import Path
 
 ENGINE_DIR = Path(__file__).resolve().parent.parent
 PATCH_DIR = ENGINE_DIR / "patches"
+MARKER = "sonoplan-deposit-start-tetra-v2"
 
-# Exact fragment from I-Simpa 929a5c8e… src/spps/CalculationCore.cpp
+_OLD_UTILISER = "#define UTILISER_MAILLAGE_OPTIMISATION\n"
+_NEW_UTILISER = (
+    f"/* SonoPlan {_MARKER}: disable UTILISER end-tetra-only punctual deposit */\n"
+    "// #define UTILISER_MAILLAGE_OPTIMISATION\n"
+)
+
+# Exact fragment from I-Simpa 929a5c8e… src/spps/CalculationCore.cpp (UTILISER)
 _OLD_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &configurationP,const vec3 &translationVector)
 {
 	if(configurationP.currentTetra)
@@ -50,9 +61,6 @@ _OLD_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &conf
 _NEW_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &configurationP,const vec3 &translationVector)
 {
 	// SonoPlan: deposit on start-tetra linked receivers before navigating away.
-	// Upstream UTILISER path only deposited on the *end* tetra; particles that
-	// leave a linked tetra in one timestep wrote zero punctual energy while
-	// still hitting walls (minimal_room CI).
 	if(configurationP.currentTetra && configurationP.currentTetra->linkedRecepteurP)
 		reportTool->ParticuleFreeTranslation(configurationP,configurationP.position+translationVector);
 
@@ -82,7 +90,6 @@ _NEW_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &conf
 	// Translation de la particule
 	configurationP.position+=translationVector;
 }"""
-
 
 _OLD_EXPAND_END = """			for(int idVoisin=0;idVoisin<4;idVoisin++)
 			{
@@ -125,22 +132,45 @@ _NEW_EXPAND_END = """			for(int idVoisin=0;idVoisin<4;idVoisin++)
 bool CheckSourcePosition(std::vector<t_Source *> &lstSource, t_Mesh *model) {"""
 
 
-def _apply_deposit_fix(src: Path) -> None:
+def _disable_utiliser(src: Path) -> None:
+    types = src / "src" / "spps" / "sppsTypes.h"
+    text = types.read_text(encoding="utf-8", errors="replace")
+    if MARKER in text:
+        print(f"disable-UTILISER: already applied in {types}")
+        return
+    if _OLD_UTILISER not in text:
+        raise SystemExit(f"disable-UTILISER: define not found in {types}")
+    types.write_text(text.replace(_OLD_UTILISER, _NEW_UTILISER, 1), encoding="utf-8", newline="\n")
+    print(f"disable-UTILISER: applied in {types}")
+
+
+def _rewrite_fpt(src: Path) -> None:
     target = src / "src" / "spps" / "CalculationCore.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
     if _NEW_FPT in text:
-        print(f"deposit-on-start-tetra: already applied in {target}")
-        return
-    if _OLD_FPT not in text:
-        raise SystemExit(
-            f"deposit-on-start-tetra: expected FreeParticleTranslation fragment "
-            f"not found in {target} (pinned commit mismatch?)"
+        print(f"deposit-on-start-tetra: FreeParticleTranslation already rewritten")
+    elif _OLD_FPT in text:
+        text = text.replace(_OLD_FPT, _NEW_FPT, 1)
+        print(f"deposit-on-start-tetra: rewritten FreeParticleTranslation in {target}")
+    else:
+        print(
+            "deposit-on-start-tetra: UTILISER FreeParticleTranslation not found "
+            "(ok when UTILISER is disabled — #else path deposits always)"
         )
-    target.write_text(text.replace(_OLD_FPT, _NEW_FPT, 1), encoding="utf-8", newline="\n")
-    print(f"deposit-on-start-tetra: applied string replace in {target}")
+    if MARKER not in text:
+        needle = '#include "CalculationCore.h"'
+        if needle not in text:
+            raise SystemExit(f"marker embed: include missing in {target}")
+        text = text.replace(
+            needle,
+            needle + f'\nstatic const char sonoplan_spps_patch[] = "{MARKER}";\n',
+            1,
+        )
+        print(f"deposit-on-start-tetra: embedded {MARKER} in {target}")
+    target.write_text(text, encoding="utf-8", newline="\n")
 
 
-def _apply_link_all_tetras(src: Path) -> None:
+def _link_all_tetras(src: Path) -> None:
     target = src / "src" / "spps" / "sppsInitialisation.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
     if "SonoPlan: ensure every tetra that can intersect" in text:
@@ -148,11 +178,10 @@ def _apply_link_all_tetras(src: Path) -> None:
         return
     if _OLD_EXPAND_END not in text:
         raise SystemExit(
-            f"link-all-tetras-within-rayon: expected ExpandPunctual fragment "
-            f"not found in {target} (pinned commit mismatch?)"
+            f"link-all-tetras-within-rayon: ExpandPunctual fragment not found in {target}"
         )
     target.write_text(text.replace(_OLD_EXPAND_END, _NEW_EXPAND_END, 1), encoding="utf-8", newline="\n")
-    print(f"link-all-tetras-within-rayon: applied string replace in {target}")
+    print(f"link-all-tetras-within-rayon: applied in {target}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -165,8 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not an I-Simpa tree: {src}", file=sys.stderr)
         return 1
 
-    patches = sorted(PATCH_DIR.glob("*.patch"))
-    for patch in patches:
+    for patch in sorted(PATCH_DIR.glob("*.patch")):
         print(f"git apply {patch.name} ...")
         r = subprocess.run(
             ["git", "apply", "--whitespace=nowarn", str(patch)],
@@ -178,13 +206,22 @@ def main(argv: list[str] | None = None) -> int:
         if r.returncode == 0:
             print(f"  ok: {patch.name}")
         else:
-            print(f"  git apply failed ({r.returncode}); using string fallback")
+            print(f"  git apply failed ({r.returncode}); string fallbacks follow")
             if r.stderr:
-                print(r.stderr[:500])
+                print(r.stderr[:400])
 
-    # Always ensure string-replace fixes are present (idempotent).
-    _apply_deposit_fix(src)
-    _apply_link_all_tetras(src)
+    _disable_utiliser(src)
+    _rewrite_fpt(src)
+    _link_all_tetras(src)
+
+    types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
+    core = (src / "src" / "spps" / "CalculationCore.cpp").read_text(encoding="utf-8")
+    init = (src / "src" / "spps" / "sppsInitialisation.cpp").read_text(encoding="utf-8")
+    if MARKER not in types and MARKER not in core:
+        raise SystemExit("ERROR: patch marker missing after apply")
+    if "SonoPlan: ensure every tetra that can intersect" not in init:
+        raise SystemExit("ERROR: link-all-tetras patch missing after apply")
+    print(f"SPPS patches OK (marker={MARKER})")
     return 0
 
 

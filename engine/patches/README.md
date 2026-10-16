@@ -7,18 +7,24 @@
 - Сохранять лицензионные уведомления upstream.
 - Применение: `engine/scripts/apply-spps-patches.py` из `build-spps-native.sh` (`git apply` + string fallback).
 
-## `0001-spps-deposit-on-start-tetra.patch`
+## Активные правки (`apply-spps-patches.py`)
 
-**Pinned commit:** `929a5c8e5f590b189f29155faeff8670f3699479`  
-**Файл:** `src/spps/CalculationCore.cpp` — `FreeParticleTranslation` (ветка `UTILISER_MAILLAGE_OPTIMISATION`).
+**Pinned commit:** `929a5c8e5f590b189f29155faeff8670f3699479`
 
-**Симптом (CI minimal_room):** SPPS exit 0, частицы поглощаются материалами (~20k), все punctual `.recp` с `energy_sum=0`.
+**Симптом (CI minimal_room):** SPPS exit 0, материалы поглощают ~20k частиц, все punctual `.recp` с `energy_sum=0`.
 
-**Причина:** upstream сначала навигирует в *конечный* тетраэдр шага, затем вызывает `ParticuleFreeTranslation` только если у *конечного* тетраэдра есть `linkedRecepteurP`. Частица, покидающая linked-тетраэдр за один timestep, не депозитит энергию.
+**Причины:**
+1. `UTILISER_MAILLAGE_OPTIMISATION`: депозит только если у *конечного* тетраэдра шага есть `linkedRecepteurP`.
+2. На 6-тетраэдрном cube `ExpandPunctualReceiver…` / `RecursiveTetraTest` оставляли часть объёма без связи с приёмником.
 
-**Исправление:** депозит по linked receivers *стартового* тетраэдра до навигации (как в ветке без UTILISER). Навигация `currentTetra` сохраняется.
+**Исправления (маркер `sonoplan-deposit-start-tetra-v2` обязан быть в бинарнике):**
+1. Отключить `#define UTILISER_MAILLAGE_OPTIMISATION` в `sppsTypes.h` (ветка без UTILISER всегда вызывает `ParticuleFreeTranslation`).
+2. Переписать UTILISER-`FreeParticleTranslation` на депозит со *стартового* тетраэдра (на будущее).
+3. Дополнительно линковать все тетраэдры вблизи сферы приёмника в `ExpandPunctualReceiverTetrahedronLocalisation`.
 
-**Влияние:** ненулевая энергия / конечный `lpDb` на punctual receivers при том же fixture; численные значения — честный SPPS, не подделка дБ.
+**Влияние:** ненулевая энергия / конечный `lpDb` на punctual receivers; дБ не подделываются.
+
+Документирующий `.patch`: `0001-spps-deposit-on-start-tetra.patch` (string fallback — источник истины в `apply-spps-patches.py`).
 
 ## `0002-spps-link-all-tetras-within-rayon.patch`
 

@@ -37,13 +37,12 @@ RUN git clone --filter=blob:none https://github.com/Universite-Gustave-Eiffel/I-
     && test "$(git rev-parse HEAD)" = "${ISIMPA_COMMIT}"
 
 WORKDIR /src/isimpa
-# SonoPlan patches (deposit-on-start-tetra; same as build-spps-native.sh)
-COPY patches/ /src/sonoplan-patches/
-COPY scripts/apply-spps-patches.py /src/apply-spps-patches.py
-RUN mkdir -p /src/sonoplan-engine/patches /src/sonoplan-engine/scripts \
-    && cp -a /src/sonoplan-patches/. /src/sonoplan-engine/patches/ \
-    && cp /src/apply-spps-patches.py /src/sonoplan-engine/scripts/ \
-    && python3 /src/sonoplan-engine/scripts/apply-spps-patches.py /src/isimpa
+# SonoPlan patches (same logic as build-spps-native.sh / apply-spps-patches.py)
+COPY patches/ /src/sonoplan-engine/patches/
+COPY scripts/apply-spps-patches.py /src/sonoplan-engine/scripts/apply-spps-patches.py
+RUN python3 /src/sonoplan-engine/scripts/apply-spps-patches.py /src/isimpa \
+    && grep -q "sonoplan-deposit-start-tetra-v2" \
+         /src/isimpa/src/spps/sppsTypes.h /src/isimpa/src/spps/CalculationCore.cpp
 
 WORKDIR /src/isimpa/build
 RUN cmake .. \
