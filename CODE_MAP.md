@@ -43,8 +43,9 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `engine/PINNED.json` | I-Simpa commit + `binary_checksum` + artifact run id |
 | `.github/workflows/build-spps.yml` | сборка Linux SPPS |
 | `.github/workflows/run-spps-job.yml` | download artifact → adapter attempt → report artifact |
-| `infra/docker-compose.yml` | postgres, rabbitmq, minio; api/worker/web — profile stubs |
-| `docs/` | ТЗ-выписки, `CHANGED_FILES.txt`, `spps-ci-artifact.md` |
+| `infra/docker-compose.yml` | optional local postgres, rabbitmq, minio; api/worker/web — profile stubs |
+| `infra/.env.example` | шаблон env; prod/staging Postgres = Neon (`sslmode=require`) |
+| `docs/` | ТЗ-выписки, `CHANGED_FILES.txt`, `spps-ci-artifact.md`, заметка Neon |
 | `.cursor/rules/` | правила Cursor / SonoPlan |
 
 ## Точки входа
@@ -59,6 +60,12 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | Contracts | `@sonoplan/contracts` + YAML/JSON Schema файлы |
 | Compose | `infra/docker-compose.yml` |
 | Миграции API | `services/api` → `alembic upgrade head` (нужен PostgreSQL) |
+
+### База данных
+
+- **Целевой Postgres (prod/staging):** Neon (hosted). URL: `postgresql+psycopg://…?sslmode=require` — см. `infra/.env.example`.
+- **Локально:** Docker Postgres из compose — optional (удобно для Alembic/ручных прогонов).
+- **Тесты API:** SQLite in-memory только через pytest fixture; не использовать как runtime-путь.
 
 ### Локальный подъём API + Web
 

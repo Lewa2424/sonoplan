@@ -21,7 +21,11 @@ FastAPI `/api/v1` — STG-04: проекты, draft с ETag, ревизии, val
 
 ## База данных
 
-- **Production / compose:** PostgreSQL через `DATABASE_URL` (`postgresql+psycopg://…`).
+- **Prod / staging:** Neon (hosted PostgreSQL) через `DATABASE_URL`.
+- **Локально:** Docker Postgres из `infra/docker-compose.yml` — optional; тот же формат URL без Neon.
+- Драйвер: `postgresql+psycopg://…`. Для Neon обязателен `sslmode=require` (psycopg подхватывает SSL).
+- Пример Neon (плейсхолдеры, не реальные секреты):
+  `postgresql+psycopg://USER:PASSWORD@ep-xxxx.region.aws.neon.tech/neondb?sslmode=require`
 - Миграции: Alembic (`alembic upgrade head`) из каталога `services/api` — таблицы `projects` / `drafts` / `revisions` / `jobs`.
 - **Pytest:** SQLite in-memory через fixture override — только для тестов, не prod-путь.
 

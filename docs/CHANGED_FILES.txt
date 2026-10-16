@@ -33,6 +33,7 @@ apps/web/tsconfig.node.json
 apps/web/vite.config.ts
 docs/CHANGED_FILES.txt
 docs/GITHUB_REMOTE.md
+docs/neon-postgres.md
 docs/engine-build-without-docker.md
 docs/engine-licenses.md
 docs/spps-ci-artifact.md
