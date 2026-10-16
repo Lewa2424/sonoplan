@@ -4,17 +4,19 @@
 Do NOT undefine UTILISER_MAILLAGE_OPTIMISATION: the upstream #ifndef path does
 not compile against the current core types (doInvertNormal / percCollision).
 
-CI zero-energy: punctual deposit gated on tetra links; cdt_vol only set when
-indexTetra is valid; unused static markers stripped by -O2. This script:
+Authoritative edits (string replace). Documenting ``engine/patches/*.patch`` may
+still be applied first; conflicts are cleaned up by the string path below.
 
 1. Links every tetra within rayon+10 (smoke 6-tetra cube).
 2. Always sets cdt_vol = (c·ρ)/V_sphere for every punctual receiver.
-3. Deposits against the full recepteur_p_List.
+3. Deposits against the full recepteur_p_List (tetra link optional).
 4. Embeds a used .rodata marker; build-spps-native.sh fails if absent in binary.
 """
 
 from __future__ import annotations
 
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -76,8 +78,6 @@ def _link_and_cdt(src: Path) -> None:
         print(f"expand-cdt-link: already applied in {target}")
         return
 
-    # Cut from first RecursiveTetraTest call through CheckSourcePosition.
-    # Works on clean upstream and after partial 0002 link-only patch.
     anchor = (
         "RecursiveTetraTest(lstRecepteurP->at(idrecp), rayonRecepteurP, "
         "recpTetra->voisins[idVoisin], tetraMesh);"
@@ -89,11 +89,7 @@ def _link_and_cdt(src: Path) -> None:
             f"expand-cdt-link: ExpandPunctual/CheckSourcePosition anchors missing in {target}"
         )
 
-    # Keep upstream RecursiveTetraTest + the three closing braces of the
-    # idVoisin / if(indexTetra) / for(idrecp) loops (not the function `}`).
     mid = text[a:b]
-    # After RecursiveTetraTest block: "\n\t\t\t}\n\t\t}\n\t}\n" then optional
-    # SonoPlan link block then "}\n\n".
     upstream_close = "\n\t\t\t}\n\t\t}\n\t}"
     c = mid.find(upstream_close)
     if c < 0:
@@ -122,34 +118,45 @@ def _deposit_all_receivers(src: Path) -> None:
 
 
 def _embed_marker(src: Path) -> None:
-    import re
-
     target = src / "src" / "spps" / "CalculationCore.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
-    # Drop any prior marker symbols (old .patch or previous apply).
-    text = re.sub(
-        r"(?:__attribute__\(\(used\)\)\s*)?static const char sonoplan_spps_patch\[\] = \"[^\"]*\";\n?",
-        "",
-        text,
-    )
-    text = re.sub(
-        r"static void sonoplan_spps_touch_marker\(void\)\s*\{[^}]*\}\n?",
-        "",
-        text,
-    )
-    text = re.sub(r"\tsonoplan_spps_touch_marker\(\);\n", "", text)
+    # Drop any prior marker from documenting .patch / older versions.
+    lines = text.splitlines(keepends=True)
+    cleaned: list[str] = []
+    skip_touch_fn = False
+    for line in lines:
+        if "sonoplan_spps_patch" in line:
+            continue
+        if "sonoplan_spps_touch_marker(void)" in line:
+            skip_touch_fn = "{" not in line or line.rstrip().endswith("{")
+            if "{" in line and "}" in line:
+                skip_touch_fn = False
+            continue
+        if skip_touch_fn:
+            if "}" in line:
+                skip_touch_fn = False
+            continue
+        if "sonoplan_spps_touch_marker();" in line:
+            continue
+        cleaned.append(line)
+    text = "".join(cleaned)
+
+    if MARKER in text and "sonoplan_spps_touch_marker" in text:
+        print(f"patch-marker: already present in {target}")
+        target.write_text(text, encoding="utf-8", newline="\n")
+        return
+
     needle = '#include "CalculationCore.h"'
     if needle not in text:
         raise SystemExit(f"patch-marker: include missing in {target}")
-    if f'"{MARKER}"' not in text:
-        blob = (
-            needle
-            + "\n"
-            + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
-            + "static void sonoplan_spps_touch_marker(void) "
-            + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
-        )
-        text = text.replace(needle, blob, 1)
+    blob = (
+        needle
+        + "\n"
+        + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
+        + "static void sonoplan_spps_touch_marker(void) "
+        + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
+    )
+    text = text.replace(needle, blob, 1)
     util_ft = (
         "void CalculationCore::FreeParticleTranslation"
         "(CONF_PARTICULE &configurationP,const vec3 &translationVector)\n"
@@ -163,11 +170,14 @@ def _embed_marker(src: Path) -> None:
         "\tsonoplan_spps_touch_marker();\n"
         "\treportTool->ParticuleFreeTranslation"
     )
-    if "sonoplan_spps_touch_marker();" not in text:
-        idx = text.rfind(util_ft)
-        if idx < 0:
-            raise SystemExit("patch-marker: UTILISER FreeParticleTranslation not found")
-        text = text[:idx] + util_ft_new + text[idx + len(util_ft) :]
+    idx = text.rfind(util_ft)
+    if idx < 0:
+        raise SystemExit("patch-marker: UTILISER FreeParticleTranslation not found")
+    text = text[:idx] + util_ft_new + text[idx + len(util_ft) :]
+    # Definition once + one reference inside touch_marker + call site string absent.
+    defs = len(re.findall(r"sonoplan_spps_patch\[\]", text))
+    if defs != 1:
+        raise SystemExit(f"patch-marker: expected one definition, got {defs}")
     target.write_text(text, encoding="utf-8", newline="\n")
     print(f"patch-marker: embedded {MARKER} in {target}")
 
@@ -182,11 +192,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not an I-Simpa tree: {src}", file=sys.stderr)
         return 1
 
-    # Documenting engine/patches/*.patch are not applied here: outdated marker
-    # patches conflict with string fallbacks (redefinition of sonoplan_spps_patch).
-    # Source of truth: the three string transforms below.
+    # Optional documenting patches; string path below is authoritative.
     for patch in sorted(PATCH_DIR.glob("*.patch")):
-        print(f"skip git apply {patch.name} (string fallbacks are authoritative)")
+        print(f"git apply {patch.name} ...")
+        r = subprocess.run(
+            ["git", "apply", "--whitespace=nowarn", str(patch)],
+            cwd=src,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode == 0:
+            print(f"  ok: {patch.name}")
+        else:
+            print(f"  git apply skipped/failed ({r.returncode}); string path follows")
+            if r.stderr:
+                print(r.stderr[:300])
 
     _link_and_cdt(src)
     _deposit_all_receivers(src)
@@ -199,8 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     ).read_text(encoding="utf-8")
     if "SonoPlan ExpandPunctual: n_recp=" not in init:
         raise SystemExit("ERROR: expand-cdt-link missing after apply")
-    if MARKER not in core:
-        raise SystemExit("ERROR: patch marker missing after apply")
+    if MARKER not in core or len(re.findall(r"sonoplan_spps_patch\[\]", core)) != 1:
+        raise SystemExit("ERROR: patch marker missing or duplicated after apply")
     if "SonoPlan: deposit against ALL punctual receivers" not in report:
         raise SystemExit("ERROR: deposit-all-recp missing after apply")
     types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
