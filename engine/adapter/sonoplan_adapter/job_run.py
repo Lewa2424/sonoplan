@@ -42,7 +42,8 @@ class CalculationAttempt:
         return asdict(self)
 
 
-def _tail(text: str, limit: int = 4000) -> str:
+def _tail(text: str, limit: int = 80000) -> str:
+    """Keep a large tail so SPPS -v load lines remain visible in CI artifacts."""
     if len(text) <= limit:
         return text
     return text[-limit:]
