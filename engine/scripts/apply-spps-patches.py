@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Apply SonoPlan SPPS source patches to a checked-out I-Simpa tree.
 
-Do NOT undefine UTILISER_MAILLAGE_OPTIMISATION: the upstream #ifndef path does
-not compile against the current core types (doInvertNormal / percCollision).
-
-UTILISER FreeParticleTranslation already deposits via ParticuleFreeTranslation;
-CI zero-energy was caused by incomplete punctual↔tetra linking on the 6-tetra
-cube. Patch ExpandPunctualReceiverTetrahedronLocalisation accordingly, and
-embed a .rodata marker so CI can prove the binary was rebuilt with patches.
+Hard rules:
+- Never undefine UTILISER_MAILLAGE_OPTIMISATION: the upstream #ifndef path does
+  not compile against current core types (doInvertNormal / percCollision).
+- Prefer ``git apply`` of ``engine/patches/*.patch`` on pinned commit 929a5c8e.
+- String fallback only for the known ExpandPunctual + marker edits (idempotent).
+- Do not rewrite FreeParticleTranslation: under UTILISER the active path already
+  calls ParticuleFreeTranslation; rewriting the #ifndef body is dead/misleading.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def _link_all_tetras(src: Path) -> None:
             f"link-all-tetras-within-rayon: ExpandPunctual fragment not found in {target}"
         )
     target.write_text(text.replace(_OLD_EXPAND_END, _NEW_EXPAND_END, 1), encoding="utf-8", newline="\n")
-    print(f"link-all-tetras-within-rayon: applied in {target}")
+    print(f"link-all-tetras-within-rayon: applied string replace in {target}")
 
 
 def _embed_marker(src: Path) -> None:
@@ -103,6 +103,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not an I-Simpa tree: {src}", file=sys.stderr)
         return 1
 
+    types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
+    if "#define UTILISER_MAILLAGE_OPTIMISATION" not in types:
+        raise SystemExit(
+            "ERROR: UTILISER_MAILLAGE_OPTIMISATION must stay defined "
+            "(ifndef FreeParticleTranslation path does not compile)"
+        )
+
+    apply_failed: list[str] = []
     for patch in sorted(PATCH_DIR.glob("*.patch")):
         print(f"git apply {patch.name} ...")
         r = subprocess.run(
@@ -115,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         if r.returncode == 0:
             print(f"  ok: {patch.name}")
         else:
+            apply_failed.append(patch.name)
             print(f"  git apply failed ({r.returncode}); string fallbacks follow")
             if r.stderr:
                 print(r.stderr[:400])
@@ -128,11 +137,17 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("ERROR: link-all-tetras patch missing after apply")
     if MARKER not in core:
         raise SystemExit("ERROR: patch marker missing after apply")
-    # Keep UTILISER defined — required for a compiling CalculationCore.
-    types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
-    if "#define UTILISER_MAILLAGE_OPTIMISATION" not in types:
-        raise SystemExit("ERROR: UTILISER must stay defined (ifndef path does not compile)")
-    print(f"SPPS patches OK (marker={MARKER}, UTILISER kept)")
+    if "#define UTILISER_MAILLAGE_OPTIMISATION" not in (
+        src / "src" / "spps" / "sppsTypes.h"
+    ).read_text(encoding="utf-8"):
+        raise SystemExit("ERROR: UTILISER was disabled during patch apply")
+
+    if apply_failed:
+        print(
+            f"WARNING: git apply missed {apply_failed}; string fallback recovered. "
+            "Regenerate patches for a clean apply on the pinned commit."
+        )
+    print(f"SPPS patches OK (marker={MARKER}, UTILISER kept, git_apply_miss={apply_failed or 'none'})")
     return 0
 
 

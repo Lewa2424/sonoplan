@@ -5,40 +5,34 @@
 - Минимальный diff; каждый `.patch` с записью: причина, до/после на fixtures, численное влияние.
 - Не менять эталоны ради зелёных тестов.
 - Сохранять лицензионные уведомления upstream.
-- Применение: `engine/scripts/apply-spps-patches.py` из `build-spps-native.sh` (`git apply` + string fallback).
+- Применение: `engine/scripts/apply-spps-patches.py` из `build-spps-native.sh`.
+- **Запрещено** снимать `#define UTILISER_MAILLAGE_OPTIMISATION`: ветка `#ifndef` в `CalculationCore.cpp` не компилируется (`doInvertNormal` / `percCollision`).
 
-## Активные правки (`apply-spps-patches.py`)
+## Pinned commit
 
-**Pinned commit:** `929a5c8e5f590b189f29155faeff8670f3699479`
+`929a5c8e5f590b189f29155faeff8670f3699479`
 
-**Симптом (CI minimal_room):** SPPS exit 0, материалы поглощают ~20k частиц, все punctual `.recp` с `energy_sum=0`.
+## `0001-spps-deposit-on-start-tetra.patch` (marker only)
 
-**Причины:**
-1. `UTILISER_MAILLAGE_OPTIMISATION`: депозит только если у *конечного* тетраэдра шага есть `linkedRecepteurP`.
-2. На 6-тетраэдрном cube `ExpandPunctualReceiver…` / `RecursiveTetraTest` оставляли часть объёма без связи с приёмником.
+**Файл:** `src/spps/CalculationCore.cpp`  
+**Содержание:** `.rodata` маркер `sonoplan-link-all-tetras-v1` для проверки, что CI-артефакт собран с патчами.  
+**Не делает:** rewrite `FreeParticleTranslation` / отключение UTILISER (раньше ломало сборку).
 
-**Исправления (маркер `sonoplan-deposit-start-tetra-v2` обязан быть в бинарнике):**
-1. Отключить `#define UTILISER_MAILLAGE_OPTIMISATION` в `sppsTypes.h` (ветка без UTILISER всегда вызывает `ParticuleFreeTranslation`).
-2. Переписать UTILISER-`FreeParticleTranslation` на депозит со *стартового* тетраэдра (на будущее).
-3. Дополнительно линковать все тетраэдры вблизи сферы приёмника в `ExpandPunctualReceiverTetrahedronLocalisation`.
-
-**Влияние:** ненулевая энергия / конечный `lpDb` на punctual receivers; дБ не подделываются.
-
-Документирующий `.patch`: `0001-spps-deposit-on-start-tetra.patch` (string fallback — источник истины в `apply-spps-patches.py`).
+Старое имя файла сохранено для совместимости путей; смысл — marker, не deposit.
 
 ## `0002-spps-link-all-tetras-within-rayon.patch`
 
-**Pinned commit:** `929a5c8e5f590b189f29155faeff8670f3699479`  
 **Файл:** `src/spps/sppsInitialisation.cpp` — `ExpandPunctualReceiverTetrahedronLocalisation`.
 
-**Симптом:** после колокации `r_near` с источником CI всё ещё даёт `ABS_SURF≈20k` и `energy_sum=0` на всех punctual `.recp`.
+**Симптом:** CI minimal_room / official cube: SPPS exit 0, `Particles remaining ≈ Total`, punctual `.recp` `energy_sum=0`.
 
-**Причина:** upstream `RecursiveTetraTest` не гарантирует `linkedRecepteurP` на стартовом тетраэдре частицы для 6-тетраэдрного cube smoke.
+**Причина:** upstream `RecursiveTetraTest` стартует только с *соседей* содержащего тетраэдра; на 6-тетраэдрном cube связь приёмник↔тетра неполная для депозита.
 
-**Исправление:** после upstream expand дополнительно линкуем каждый тетраэдр, чей центроид в пределах `rayon+10` м от приёмника.
+**Исправление:** после upstream expand дополнительно линкуем каждый тетраэдр, чей центроид в пределах `rayon+10` м.
+
+**Влияние (ожидаемое):** ненулевая энергия на punctual receivers при пролёте частиц. Если после зелёной сборки energy всё ещё 0 — корень не в apply патчей, а в запуске/физике/материалах mesh; не invent dB.
 
 ## Планируемый патч: код возврата SPPS (ENG-009)
 
-**Факт:** `main` в `sppsNantes.cpp` всегда `return 0` после `MainProcess` — процесс может завершиться с 0 при сбое.
-
-**Намерение (ещё не в tree как рабочий патч):** проброс статуса `MainProcess` + регрессия `fixtures/broken_exit0`.
+**Факт:** `main` в `sppsNantes.cpp` всегда `return 0` после `MainProcess`.  
+**Намерение:** проброс статуса + регрессия `fixtures/broken_exit0`.

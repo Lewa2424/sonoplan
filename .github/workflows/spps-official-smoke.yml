@@ -1,0 +1,238 @@
+# Build SPPS from pin + run OUR binary on literal I-Simpa official test assets.
+# Goal: prove energy>0 on any official control before trusting minimal_room.
+# Does not invent dB. Uploads full stdout + statsSPPS decode.
+
+name: SPPS Official Smoke
+
+"on":
+  workflow_dispatch:
+  push:
+    paths:
+      - "engine/Dockerfile"
+      - "engine/PINNED.json"
+      - "engine/patches/**"
+      - "engine/scripts/build-spps-native.sh"
+      - "engine/scripts/apply-spps-patches.py"
+      - "engine/scripts/fetch-isimpa.sh"
+      - "engine/scripts/prepare-official-spps-control.py"
+      - "engine/scripts/patch-tetramesh-idvolume.py"
+      - ".github/workflows/spps-official-smoke.yml"
+      - ".github/workflows/build-spps.yml"
+
+concurrency:
+  group: spps-official-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: Release
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cache/CPM
+
+jobs:
+  build-and-official-smoke:
+    name: Build SPPS + official I-Simpa config
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout SonoPlan
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake git python3 python3-dev \
+            swig libboost-all-dev byacc gettext libpng-dev libjpeg-dev
+
+      - name: Cache CPM packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CPM_SOURCE_CACHE }}
+          key: ${{ runner.os }}-cpm-spps-${{ hashFiles('engine/PINNED.json') }}
+          restore-keys: |
+            ${{ runner.os }}-cpm-spps-
+
+      - name: Build SPPS (native, patched)
+        run: |
+          chmod +x engine/scripts/fetch-isimpa.sh engine/scripts/build-spps-native.sh
+          ./engine/scripts/build-spps-native.sh
+
+      - name: Prepare output dir + verify patch marker
+        run: |
+          set -euo pipefail
+          mkdir -p ci-official-smoke
+          strings engine/dist/spps | grep -F 'sonoplan-link-all-tetras-v1' \
+            || { echo "BUILD_FAIL: patch marker missing in spps binary"; exit 1; }
+          echo "BUILD_OK marker present"
+          sha256sum engine/dist/spps | tee ci-official-smoke/sha256.txt
+
+      - name: Prepare official I-Simpa control (literal assets)
+        run: |
+          set -euo pipefail
+          COMMIT=$(python3 -c "import json; print(json.load(open('engine/PINNED.json'))['isimpa']['commit'])")
+          SRC=engine/.cache/isimpa
+          test -d "$SRC/.git" || { echo "isimpa cache missing after build"; exit 1; }
+          test "$(git -C "$SRC" rev-parse HEAD)" = "$COMMIT"
+          OUT=ci-official-smoke/workdir
+          python3 engine/scripts/prepare-official-spps-control.py \
+            --isimpa-root "$SRC" --out-dir "$OUT" --seed 1
+          python3 engine/scripts/patch-tetramesh-idvolume.py "$OUT/tetramesh.mbin" --volume 0
+          # Document mesh material ids vs config (diagnostic, not a rewrite).
+          python3 <<'PY'
+          import struct
+          from pathlib import Path
+          mesh = Path("ci-official-smoke/workdir/mesh.cbin").read_bytes()
+          off = 8
+          mats = set()
+          while off + 12 <= len(mesh):
+              node_type = struct.unpack_from("<H", mesh, off)[0]
+              next_b = struct.unpack_from("<i", mesh, off + 8)[0]
+              payload = off + 12
+              if node_type == 1:
+                  payload += 256
+                  nface = struct.unpack_from("<i", mesh, payload)[0]
+                  payload += 4
+                  for _ in range(nface):
+                      id_mat = struct.unpack_from("<i", mesh, payload + 12)[0]
+                      mats.add(id_mat)
+                      payload += 20
+              if next_b == 0 or next_b <= off:
+                  break
+              off = next_b
+          cfg = Path("ci-official-smoke/workdir/config.xml").read_text(encoding="utf-8", errors="replace")
+          import re
+          cfg_ids = set(int(x) for x in re.findall(r'type_surface id="(\d+)"', cfg))
+          Path("ci-official-smoke/mesh_vs_config_materials.txt").write_text(
+              f"mesh_face_idMat={sorted(mats)}\nconfig_type_surface_ids={sorted(cfg_ids)}\n"
+              f"mesh_ids_missing_in_config={sorted(set(mats) - cfg_ids - {{-1}})}\n",
+              encoding="utf-8",
+          )
+          print(Path("ci-official-smoke/mesh_vs_config_materials.txt").read_text())
+          PY
+
+      - name: Run OUR spps -v on official config (cwd=workdir)
+        working-directory: ci-official-smoke/workdir
+        run: |
+          set -euo pipefail
+          SPPS="${GITHUB_WORKSPACE}/engine/dist/spps"
+          chmod +x "$SPPS"
+          set +e
+          "$SPPS" -v ./config.xml > ../spps_stdout.txt 2> ../spps_stderr.txt
+          EC=$?
+          set -e
+          echo "spps_exit=$EC" | tee ../spps_exit.txt
+          # Always keep logs even on non-zero (ENG-009 may still exit 0).
+          wc -l ../spps_stdout.txt ../spps_stderr.txt || true
+          ls -la
+          find . -type f | sort | tee ../workdir_listing.txt
+
+      - name: Decode statsSPPS + punctual energy
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, "engine/adapter")
+          from sonoplan_adapter.gabe import GabeObjectType, load_gabe
+          from sonoplan_adapter.results import decode_spps_workdir
+
+          work = Path("ci-official-smoke/workdir")
+          out = Path("ci-official-smoke")
+          report = {"energySumGlobal": 0.0, "lpDbGlobal": None, "nonzero": [], "stats": None}
+
+          stats = work / "statsSPPS.gabe"
+          if stats.is_file():
+              table = load_gabe(stats)
+              labels = table.columns[0].strings or ()
+              bands = {}
+              for col in table.columns[1:]:
+                  if col.col_type is GabeObjectType.INT and col.ints is not None:
+                      bands[col.label] = {
+                          labels[i] if i < len(labels) else str(i): int(col.ints[i])
+                          for i in range(len(col.ints))
+                      }
+              report["stats"] = bands
+              out.joinpath("stats_decode.json").write_text(
+                  json.dumps(bands, indent=2), encoding="utf-8"
+              )
+              print("=== statsSPPS ===")
+              print(json.dumps(bands, indent=2))
+          else:
+              print("MISSING statsSPPS.gabe")
+
+          decoded = decode_spps_workdir(work)
+          out.joinpath("decode_outputs.json").write_text(
+              json.dumps(
+                  {
+                      "ok": decoded.ok,
+                      "errors": decoded.errors,
+                      "punctual": [p for p in decoded.punctual],
+                  },
+                  indent=2,
+                  default=str,
+              ),
+              encoding="utf-8",
+          )
+          nonzero = []
+          energy_global = 0.0
+          for p in decoded.punctual:
+              eg = float(p.get("energySumGlobal") or 0.0)
+              energy_global += eg
+              if eg > 0:
+                  nonzero.append({"receiverId": p.get("receiverId"), "energySumGlobal": eg, "lpDbGlobal": p.get("lpDbGlobal")})
+          report["energySumGlobal"] = energy_global
+          report["nonzero"] = nonzero
+          if nonzero:
+              report["lpDbGlobal"] = nonzero[0].get("lpDbGlobal")
+          out.joinpath("energy_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+          print("=== energy ===")
+          print(json.dumps(report, indent=2))
+          flag = out / "HAS_ENERGY.txt"
+          if nonzero:
+              flag.write_text("1\n", encoding="utf-8")
+              print("REAL_SUCCESS energy>0")
+          else:
+              flag.write_text("0\n", encoding="utf-8")
+              print("STILL_ZERO energySumGlobal=0 lpDb=null")
+          PY
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## SPPS official smoke"
+            echo ""
+            echo "- Build: see Build SPPS step (BUILD_OK required)"
+            if [[ -f ci-official-smoke/spps_exit.txt ]]; then
+              echo "- spps exit: \`$(cat ci-official-smoke/spps_exit.txt)\`"
+            fi
+            if [[ -f ci-official-smoke/HAS_ENERGY.txt ]]; then
+              echo "- HAS_ENERGY: \`$(cat ci-official-smoke/HAS_ENERGY.txt)\`"
+            fi
+            if [[ -f ci-official-smoke/energy_report.json ]]; then
+              echo ""
+              echo '```json'
+              cat ci-official-smoke/energy_report.json
+              echo '```'
+            fi
+            if [[ -f ci-official-smoke/mesh_vs_config_materials.txt ]]; then
+              echo ""
+              echo "### Mesh vs config materials"
+              echo '```'
+              cat ci-official-smoke/mesh_vs_config_materials.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spps-official-smoke
+          path: |
+            engine/dist/spps
+            engine/dist/SHA256SUMS
+            engine/dist/ORIGIN.txt
+            ci-official-smoke/
+          if-no-files-found: warn
+          retention-days: 14
