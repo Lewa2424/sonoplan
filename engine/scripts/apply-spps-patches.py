@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Apply SonoPlan SPPS source patches to a checked-out I-Simpa tree.
 
-Prefers ``git apply`` for ``engine/patches/*.patch``. Falls back to an exact
-string replace for the known UTILISER deposit fix when the hunk context
-cannot match (e.g. CRLF / line-number drift).
+Do NOT undefine UTILISER_MAILLAGE_OPTIMISATION: the upstream #ifndef path does
+not compile against the current core types (doInvertNormal / percCollision).
+
+UTILISER FreeParticleTranslation already deposits via ParticuleFreeTranslation;
+CI zero-energy was caused by incomplete punctual↔tetra linking on the 6-tetra
+cube. Patch ExpandPunctualReceiverTetrahedronLocalisation accordingly, and
+embed a .rodata marker so CI can prove the binary was rebuilt with patches.
 """
 
 from __future__ import annotations
@@ -14,75 +18,7 @@ from pathlib import Path
 
 ENGINE_DIR = Path(__file__).resolve().parent.parent
 PATCH_DIR = ENGINE_DIR / "patches"
-
-# Exact fragment from I-Simpa 929a5c8e… src/spps/CalculationCore.cpp
-_OLD_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &configurationP,const vec3 &translationVector)
-{
-	if(configurationP.currentTetra)
-	{
-		bool changeTetrahedra=true;
-		float tMax=-1;
-		while(changeTetrahedra) //On navigue de tetraedre a tetraedre jusqu'a ce que le point de collision soit plus loin que le vecteur de translation
-		{
-			changeTetrahedra=false;
-			float t;
-			entier_court idfacemaxdist=GetTetraFaceCollision(configurationP,translationVector,t);
-			if(idfacemaxdist>=0 && t<1 && t>=-EPSILON)
-			{
-				if(configurationP.currentTetra->voisins[idfacemaxdist] && tMax<t) //
-				{
-					reportTool->ParticuleGoToNextTetrahedra(configurationP,configurationP.currentTetra->voisins[idfacemaxdist]);
-					configurationP.currentTetra=configurationP.currentTetra->voisins[idfacemaxdist];
-					changeTetrahedra=true;
-					tMax=t;
-				}
-			}
-		}
-	}
-	if(configurationP.currentTetra->linkedRecepteurP)
-		reportTool->ParticuleFreeTranslation(configurationP,configurationP.position+translationVector);
-
-	//////////////
-	// Translation de la particule
-	configurationP.position+=translationVector;
-}"""
-
-_NEW_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &configurationP,const vec3 &translationVector)
-{
-	// SonoPlan: deposit on start-tetra linked receivers before navigating away.
-	// Upstream UTILISER path only deposited on the *end* tetra; particles that
-	// leave a linked tetra in one timestep wrote zero punctual energy while
-	// still hitting walls (minimal_room CI).
-	if(configurationP.currentTetra && configurationP.currentTetra->linkedRecepteurP)
-		reportTool->ParticuleFreeTranslation(configurationP,configurationP.position+translationVector);
-
-	if(configurationP.currentTetra)
-	{
-		bool changeTetrahedra=true;
-		float tMax=-1;
-		while(changeTetrahedra) //On navigue de tetraedre a tetraedre jusqu'a ce que le point de collision soit plus loin que le vecteur de translation
-		{
-			changeTetrahedra=false;
-			float t;
-			entier_court idfacemaxdist=GetTetraFaceCollision(configurationP,translationVector,t);
-			if(idfacemaxdist>=0 && t<1 && t>=-EPSILON)
-			{
-				if(configurationP.currentTetra->voisins[idfacemaxdist] && tMax<t) //
-				{
-					reportTool->ParticuleGoToNextTetrahedra(configurationP,configurationP.currentTetra->voisins[idfacemaxdist]);
-					configurationP.currentTetra=configurationP.currentTetra->voisins[idfacemaxdist];
-					changeTetrahedra=true;
-					tMax=t;
-				}
-			}
-		}
-	}
-
-	//////////////
-	// Translation de la particule
-	configurationP.position+=translationVector;
-}"""
-
+MARKER = "sonoplan-link-all-tetras-v1"
 
 _OLD_EXPAND_END = """			for(int idVoisin=0;idVoisin<4;idVoisin++)
 			{
@@ -125,22 +61,7 @@ _NEW_EXPAND_END = """			for(int idVoisin=0;idVoisin<4;idVoisin++)
 bool CheckSourcePosition(std::vector<t_Source *> &lstSource, t_Mesh *model) {"""
 
 
-def _apply_deposit_fix(src: Path) -> None:
-    target = src / "src" / "spps" / "CalculationCore.cpp"
-    text = target.read_text(encoding="utf-8", errors="replace")
-    if _NEW_FPT in text:
-        print(f"deposit-on-start-tetra: already applied in {target}")
-        return
-    if _OLD_FPT not in text:
-        raise SystemExit(
-            f"deposit-on-start-tetra: expected FreeParticleTranslation fragment "
-            f"not found in {target} (pinned commit mismatch?)"
-        )
-    target.write_text(text.replace(_OLD_FPT, _NEW_FPT, 1), encoding="utf-8", newline="\n")
-    print(f"deposit-on-start-tetra: applied string replace in {target}")
-
-
-def _apply_link_all_tetras(src: Path) -> None:
+def _link_all_tetras(src: Path) -> None:
     target = src / "src" / "spps" / "sppsInitialisation.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
     if "SonoPlan: ensure every tetra that can intersect" in text:
@@ -148,11 +69,28 @@ def _apply_link_all_tetras(src: Path) -> None:
         return
     if _OLD_EXPAND_END not in text:
         raise SystemExit(
-            f"link-all-tetras-within-rayon: expected ExpandPunctual fragment "
-            f"not found in {target} (pinned commit mismatch?)"
+            f"link-all-tetras-within-rayon: ExpandPunctual fragment not found in {target}"
         )
     target.write_text(text.replace(_OLD_EXPAND_END, _NEW_EXPAND_END, 1), encoding="utf-8", newline="\n")
-    print(f"link-all-tetras-within-rayon: applied string replace in {target}")
+    print(f"link-all-tetras-within-rayon: applied in {target}")
+
+
+def _embed_marker(src: Path) -> None:
+    target = src / "src" / "spps" / "CalculationCore.cpp"
+    text = target.read_text(encoding="utf-8", errors="replace")
+    if MARKER in text:
+        print(f"patch-marker: already present in {target}")
+        return
+    needle = '#include "CalculationCore.h"'
+    if needle not in text:
+        raise SystemExit(f"patch-marker: include missing in {target}")
+    text = text.replace(
+        needle,
+        needle + f'\nstatic const char sonoplan_spps_patch[] = "{MARKER}";\n',
+        1,
+    )
+    target.write_text(text, encoding="utf-8", newline="\n")
+    print(f"patch-marker: embedded {MARKER} in {target}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -165,8 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: not an I-Simpa tree: {src}", file=sys.stderr)
         return 1
 
-    patches = sorted(PATCH_DIR.glob("*.patch"))
-    for patch in patches:
+    for patch in sorted(PATCH_DIR.glob("*.patch")):
         print(f"git apply {patch.name} ...")
         r = subprocess.run(
             ["git", "apply", "--whitespace=nowarn", str(patch)],
@@ -178,13 +115,24 @@ def main(argv: list[str] | None = None) -> int:
         if r.returncode == 0:
             print(f"  ok: {patch.name}")
         else:
-            print(f"  git apply failed ({r.returncode}); using string fallback")
+            print(f"  git apply failed ({r.returncode}); string fallbacks follow")
             if r.stderr:
-                print(r.stderr[:500])
+                print(r.stderr[:400])
 
-    # Always ensure string-replace fixes are present (idempotent).
-    _apply_deposit_fix(src)
-    _apply_link_all_tetras(src)
+    _link_all_tetras(src)
+    _embed_marker(src)
+
+    init = (src / "src" / "spps" / "sppsInitialisation.cpp").read_text(encoding="utf-8")
+    core = (src / "src" / "spps" / "CalculationCore.cpp").read_text(encoding="utf-8")
+    if "SonoPlan: ensure every tetra that can intersect" not in init:
+        raise SystemExit("ERROR: link-all-tetras patch missing after apply")
+    if MARKER not in core:
+        raise SystemExit("ERROR: patch marker missing after apply")
+    # Keep UTILISER defined — required for a compiling CalculationCore.
+    types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
+    if "#define UTILISER_MAILLAGE_OPTIMISATION" not in types:
+        raise SystemExit("ERROR: UTILISER must stay defined (ifndef path does not compile)")
+    print(f"SPPS patches OK (marker={MARKER}, UTILISER kept)")
     return 0
 
 
