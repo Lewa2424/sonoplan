@@ -122,7 +122,8 @@ def _bfreq_source_db(base_db: float = 80.0) -> list[ET.Element]:
 
 def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     root = ET.Element("configuration")
-    root.set("workingdirectory", ".")
+    # Must end with path separator: SPPS does workingDir+modelName (".mesh.cbin" if ".").
+    root.set("workingdirectory", "./")
 
     sim = ET.SubElement(root, "simulation")
     sim.set("recepteurss_directory", "recepteurss")

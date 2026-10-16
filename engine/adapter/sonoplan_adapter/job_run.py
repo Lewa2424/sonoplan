@@ -34,9 +34,17 @@ class CalculationAttempt:
     failure_reasons: list[str] = field(default_factory=list)
     output_checks: list[dict[str, Any]] = field(default_factory=list)
     artifact_paths: list[str] = field(default_factory=list)
+    stdout_tail: str | None = None
+    stderr_tail: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def _tail(text: str, limit: int = 4000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
 
 
 def attempt_spps_calculation(
@@ -87,6 +95,8 @@ def attempt_spps_calculation(
             spps_executable=env.spps_bin or "spps",
         )
     )
+    stdout_tail = _tail(result.stdout or "")
+    stderr_tail = _tail(result.stderr or "")
     if not result.ok:
         reasons = list(result.failure_reasons)
         return CalculationAttempt(
@@ -99,6 +109,8 @@ def attempt_spps_calculation(
             duration_s=result.duration_s,
             failure_reasons=reasons,
             output_checks=list(result.output_checks),
+            stdout_tail=stdout_tail or None,
+            stderr_tail=stderr_tail or None,
         )
 
     artifacts = [
@@ -115,6 +127,8 @@ def attempt_spps_calculation(
         failure_reasons=[],
         output_checks=list(result.output_checks),
         artifact_paths=artifacts,
+        stdout_tail=stdout_tail or None,
+        stderr_tail=stderr_tail or None,
     )
 
 

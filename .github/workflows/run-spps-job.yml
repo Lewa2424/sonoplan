@@ -165,7 +165,17 @@ jobs:
           CODE=$?
           set -e
           echo "attempt_exit=$CODE" | tee ../../ci-spps-job/attempt_exit.txt
-          # Copy SPPS stdout/stderr from report for debugging; keep workdir listing.
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          rep = Path("../../ci-spps-job/attempt_run.json")
+          if rep.is_file():
+              data = json.loads(rep.read_text(encoding="utf-8"))
+              print("--- stdout_tail ---")
+              print(data.get("stdout_tail") or "(empty)")
+              print("--- stderr_tail ---")
+              print(data.get("stderr_tail") or "(empty)")
+          PY
           find ../fixtures/minimal_room/inputs -type f | tee ../../ci-spps-job/workdir_listing.txt
           test "$CODE" -eq 0
 

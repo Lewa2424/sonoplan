@@ -72,7 +72,7 @@ Copied unchanged (official upstream test binaries / data):
 
 Generated (structure from src/spps/tests/config.xml, adapted for this mesh):
   config.xml
-    - workingdirectory=.
+    - workingdirectory=./  (trailing slash required: SPPS concatenates workingDir+file)
     - modelName=mesh.cbin / tetrameshFileName=tetramesh.mbin
     - surface materials ids 100 and 101 (face idMat in mesh.cbin)
     - no surface receivers (mesh idRs=-1)
