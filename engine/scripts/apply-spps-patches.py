@@ -22,7 +22,7 @@ MARKER = "sonoplan-deposit-start-tetra-v2"
 
 _OLD_UTILISER = "#define UTILISER_MAILLAGE_OPTIMISATION\n"
 _NEW_UTILISER = (
-    f"/* SonoPlan {_MARKER}: disable UTILISER end-tetra-only punctual deposit */\n"
+    f"/* SonoPlan {MARKER}: disable UTILISER end-tetra-only punctual deposit */\n"
     "// #define UTILISER_MAILLAGE_OPTIMISATION\n"
 )
 
