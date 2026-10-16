@@ -12,6 +12,7 @@
     "build:web": "pnpm --filter @sonoplan/web build",
     "typecheck": "pnpm -r --filter \"./packages/*\" --filter \"./apps/*\" typecheck",
     "test:domain": "pnpm --filter @sonoplan/domain test",
+    "test:web": "pnpm --filter @sonoplan/web test",
     "build:packages": "pnpm --filter @sonoplan/domain --filter @sonoplan/contracts build"
   }
 }

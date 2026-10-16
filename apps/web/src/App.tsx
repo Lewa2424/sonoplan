@@ -15,6 +15,7 @@ export function App() {
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/model" element={<ModelPage />} />
+          <Route path="/model/:projectId" element={<ModelPage />} />
           <Route path="/calculations" element={<CalculationsPage />} />
         </Routes>
       </main>

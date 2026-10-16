@@ -31,6 +31,7 @@ apps/web/tsconfig.json
 apps/web/tsconfig.node.json
 apps/web/vite.config.ts
 docs/CHANGED_FILES.txt
+docs/GITHUB_REMOTE.md
 docs/engine-build-without-docker.md
 docs/engine-licenses.md
 engine/BUILD_STATUS.md
@@ -97,3 +98,17 @@ services/worker/pyproject.toml
 services/worker/src/sonoplan_worker/__init__.py
 services/worker/src/sonoplan_worker/celery_app.py
 tests/e2e/README.md
+apps/web/.env.example
+apps/web/src/api/client.ts
+apps/web/src/api/config.ts
+apps/web/src/api/projectsApi.ts
+apps/web/src/api/types.ts
+apps/web/src/components/EditorToolbar.tsx
+apps/web/src/components/PlanCanvas.tsx
+apps/web/src/components/PropertiesPanel.tsx
+apps/web/src/components/ValidationList.tsx
+apps/web/src/hooks/useElementSize.ts
+apps/web/src/model/contourHelpers.test.ts
+apps/web/src/model/contourHelpers.ts
+apps/web/src/model/factoryModel.ts
+apps/web/src/store/editorStore.ts
