@@ -33,8 +33,10 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `apps/web/src/pages/CalculationsPage.tsx` | job + polling; таблица punctual Lp (дБ); карта поверхности отложена |
 | `apps/web/src/store/editorStore.ts` | Zustand: модель, selection, sync, validate, revision |
 | `packages/domain` | Типы; координаты; геометрия; `computeSnapshotHash`; `validateModel` |
+| `packages/domain/src/diffuseFieldEstimate.ts` | Предварительная оценка Lp по формуле помещения (OPT-010), не SPPS; слой «Оценка» на плане |
 | `packages/contracts` | `schemas/project.schema.json`, `openapi/openapi.yaml`, `SCHEMA_VERSION` |
 | `services/api` | FastAPI: projects/draft/revisions/validate/**jobs** |
+| `services/api/scripts/restart-api.ps1` | Windows: kill port-8000 orphans, start uvicorn **without** `--reload` |
 | `services/api/src/sonoplan_api/job_execution.py` | inline/worker: adapter → fail codes / ResultManifest |
 | `services/api/src/sonoplan_api/github_actions_jobs.py` | Free Linux worker: dispatch + poll Actions artifacts |
 | `.github/workflows/run-spps-product-job.yml` | Product job: live SPPS on ubuntu-22.04 → job artifact |

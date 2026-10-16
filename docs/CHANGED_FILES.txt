@@ -86,6 +86,7 @@ packages/domain/vitest.config.ts
 pnpm-lock.yaml
 pnpm-workspace.yaml
 services/api/README.md
+services/api/scripts/restart-api.ps1
 services/api/alembic.ini
 services/api/alembic/env.py
 services/api/alembic/script.py.mako
@@ -196,3 +197,5 @@ apps/web/src/hooks/useRunCalculation.ts
 engine/adapter/sonoplan_adapter/rsbin_io.py
 engine/adapter/tests/test_rsbin_io.py
 engine/adapter/tests/test_csbin_path_slash.py
+packages/domain/src/diffuseFieldEstimate.ts
+packages/domain/src/diffuseFieldEstimate.test.ts

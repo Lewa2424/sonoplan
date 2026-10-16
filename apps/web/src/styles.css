@@ -384,6 +384,15 @@ body {
   border-radius: 6px;
 }
 
+.plan-estimate-note {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+}
+
+.plan-map-toggle {
+  margin: 4px 0 0;
+}
+
 .plan-stage-host {
   flex: 1;
   min-height: 0;

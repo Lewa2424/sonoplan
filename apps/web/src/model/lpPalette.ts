@@ -74,6 +74,16 @@ export function surfaceMapToDataUrl(args: {
   lpDb: readonly (number | null)[];
   scale?: LpColorScale | null;
 }): string | null {
+  return surfaceMapToCanvas(args)?.toDataURL("image/png") ?? null;
+}
+
+/** Same bitmap as surfaceMapToDataUrl, without PNG encode (live redraw while dragging). */
+export function surfaceMapToCanvas(args: {
+  nx: number;
+  ny: number;
+  lpDb: readonly (number | null)[];
+  scale?: LpColorScale | null;
+}): HTMLCanvasElement | null {
   const { nx, ny, lpDb } = args;
   if (nx < 1 || ny < 1 || lpDb.length < nx * ny) return null;
   if (typeof document === "undefined") return null;
@@ -108,5 +118,5 @@ export function surfaceMapToDataUrl(args: {
   if (!ctx) return null;
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/png");
+  return canvas;
 }

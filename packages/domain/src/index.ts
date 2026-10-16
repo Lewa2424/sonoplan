@@ -70,3 +70,15 @@ export {
 } from "./validate.js";
 
 export { sha256Hex } from "./sha256.js";
+
+export {
+  DIFFUSE_MIN_DISTANCE_M,
+  type DiffuseEstimateUnavailableReason,
+  type DiffuseFieldSource,
+  type DiffuseFieldInput,
+  type DiffuseFieldInputResult,
+  type DiffuseFieldGrid,
+  buildDiffuseFieldInput,
+  estimateLpAt,
+  estimateLpGrid,
+} from "./diffuseFieldEstimate.js";

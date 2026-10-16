@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Stage, Layer, Line, Circle, Text, Group, Image as KonvaImage } from "react-konva";
 import type Konva from "konva";
-import { stripClosingDuplicate } from "@sonoplan/domain";
+import {
+  buildDiffuseFieldInput,
+  estimateLpAt,
+  estimateLpGrid,
+  stripClosingDuplicate,
+  type ModelSnapshot,
+} from "@sonoplan/domain";
 import { useElementSize } from "../hooks/useElementSize";
 import { ru } from "../i18n/ru";
 import {
@@ -17,6 +23,7 @@ import {
 import {
   computeLpScale,
   formatLpScaleLegend,
+  surfaceMapToCanvas,
   surfaceMapToDataUrl,
 } from "../model/lpPalette";
 import { useEditorStore } from "../store/editorStore";
@@ -62,6 +69,47 @@ interface PlanCanvasProps {
   height?: number;
 }
 
+/** Live position while a source / workplace is being dragged (not yet in store). */
+interface DragOverride {
+  readonly kind: "source" | "workplace";
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+}
+
+const DEFAULT_ESTIMATE_Z_M = 1.5;
+
+function withDragOverride(
+  model: ModelSnapshot,
+  drag: DragOverride | null,
+): ModelSnapshot {
+  if (!drag) return model;
+  if (drag.kind === "source") {
+    return {
+      ...model,
+      sources: model.sources.map((s) =>
+        s.id === drag.id
+          ? { ...s, position: { ...s.position, x: drag.x, y: drag.y } }
+          : s,
+      ),
+    };
+  }
+  return {
+    ...model,
+    workplaces: model.workplaces.map((w) =>
+      w.id === drag.id
+        ? { ...w, position: { ...w.position, x: drag.x, y: drag.y } }
+        : w,
+    ),
+  };
+}
+
+function receiverZ(w: ModelSnapshot["workplaces"][number]): number {
+  const h = w.receiverHeightM.value;
+  if (h !== null && Number.isFinite(h) && h > 0) return h;
+  return w.position.z > 0.05 ? w.position.z : DEFAULT_ESTIMATE_Z_M;
+}
+
 export function PlanCanvas(_props: PlanCanvasProps) {
   const stageHostRef = useRef<HTMLDivElement>(null);
   const { width, height } = useElementSize(stageHostRef);
@@ -97,6 +145,8 @@ export function PlanCanvas(_props: PlanCanvasProps) {
     "none",
   );
   const [heatmapImg, setHeatmapImg] = useState<HTMLImageElement | null>(null);
+  const [dragOverride, setDragOverride] = useState<DragOverride | null>(null);
+  const [preferEstimate, setPreferEstimate] = useState(false);
   /** Absolute angle labels (inside perimeter) — neighbors only while dragging. */
   const roomLabelRefs = useRef<(Konva.Text | null)[]>([]);
   const draftLabelRefs = useRef<(Konva.Text | null)[]>([]);
@@ -233,6 +283,67 @@ export function PlanCanvas(_props: PlanCanvasProps) {
     img.onload = () => setHeatmapImg(img);
     img.src = heatmapUrl;
   }, [heatmapUrl]);
+
+  // A fresh SPPS map should be what the user sees first.
+  const sppsJobId = planSurfaceMap?.jobId ?? null;
+  useEffect(() => {
+    if (sppsJobId) setPreferEstimate(false);
+  }, [sppsJobId]);
+
+  const sppsMapFresh = Boolean(heatmapImg && planSurfaceMap && mapScale && !stale);
+  const showSppsMap = sppsMapFresh && !preferEstimate && !dragOverride;
+
+  const estimateModel = useMemo(
+    () => withDragOverride(model, dragOverride),
+    [model, dragOverride],
+  );
+  const estimateInput = useMemo(
+    () => buildDiffuseFieldInput(estimateModel),
+    [estimateModel],
+  );
+  const estimateZ = useMemo(() => {
+    const zs = estimateModel.workplaces.map(receiverZ);
+    return zs.length > 0
+      ? zs.reduce((a, b) => a + b, 0) / zs.length
+      : DEFAULT_ESTIMATE_Z_M;
+  }, [estimateModel.workplaces]);
+  const estimateGrid = useMemo(
+    () =>
+      estimateInput.ok && !showSppsMap
+        ? estimateLpGrid(estimateInput.input, estimateZ)
+        : null,
+    [estimateInput, estimateZ, showSppsMap],
+  );
+  const estimateScale = useMemo(
+    () => (estimateGrid ? computeLpScale(estimateGrid.lpDb) : null),
+    [estimateGrid],
+  );
+  const estimateCanvas = useMemo(
+    () =>
+      estimateGrid && estimateScale
+        ? surfaceMapToCanvas({
+            nx: estimateGrid.nx,
+            ny: estimateGrid.ny,
+            lpDb: estimateGrid.lpDb,
+            scale: estimateScale,
+          })
+        : null,
+    [estimateGrid, estimateScale],
+  );
+  const estimateByWorkplaceId = useMemo(() => {
+    const out = new Map<string, number>();
+    if (!estimateInput.ok) return out;
+    for (const w of estimateModel.workplaces) {
+      const lp = estimateLpAt(
+        estimateInput.input,
+        w.position.x,
+        w.position.y,
+        receiverZ(w),
+      );
+      if (lp !== null) out.set(w.id, lp);
+    }
+    return out;
+  }, [estimateInput, estimateModel.workplaces]);
 
   const bounds = useMemo(() => {
     if (!room) {
@@ -427,9 +538,32 @@ export function PlanCanvas(_props: PlanCanvasProps) {
       {stale && (planLpOverlay || planSurfaceMap) ? (
         <p className="banner banner--warn">{ru.model.staleLp}</p>
       ) : null}
-      {heatmapImg && planSurfaceMap && mapScale && !stale ? (
+      {showSppsMap && mapScale ? (
         <p className="page-meta plan-map-scale" aria-live="polite">
           {ru.calculations.mapScaleOnPlan}: {formatLpScaleLegend(mapScale)}
+        </p>
+      ) : estimateCanvas && estimateScale ? (
+        <>
+          <p className="page-meta plan-map-scale" aria-live="polite">
+            {ru.model.estimateLegend}, {ru.model.estimateAtHeight}{" "}
+            {estimateZ.toFixed(1)} м: {formatLpScaleLegend(estimateScale)}
+          </p>
+          <p className="page-hint plan-estimate-note">{ru.model.estimateNote}</p>
+        </>
+      ) : !estimateInput.ok && !showSppsMap ? (
+        <p className="page-hint plan-estimate-note">
+          {ru.model.estimateUnavailable[estimateInput.reason]}
+        </p>
+      ) : null}
+      {sppsMapFresh ? (
+        <p className="plan-map-toggle">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setPreferEstimate((v) => !v)}
+          >
+            {preferEstimate ? ru.model.showSppsMap : ru.model.showEstimateMap}
+          </button>
         </p>
       ) : null}
       <div className="plan-stage-host" ref={stageHostRef}>
@@ -463,7 +597,22 @@ export function PlanCanvas(_props: PlanCanvasProps) {
               }}
             />
           )}
-          {heatmapImg && planSurfaceMap && !stale ? (
+          {!showSppsMap && estimateCanvas && estimateGrid ? (
+            <KonvaImage
+              image={estimateCanvas}
+              x={transform.offsetX + estimateGrid.originX * transform.scale}
+              y={
+                transform.offsetY -
+                (estimateGrid.originY + estimateGrid.ny * estimateGrid.cellSizeM) *
+                  transform.scale
+              }
+              width={estimateGrid.nx * estimateGrid.cellSizeM * transform.scale}
+              height={estimateGrid.ny * estimateGrid.cellSizeM * transform.scale}
+              listening={false}
+              opacity={0.75}
+            />
+          ) : null}
+          {showSppsMap && heatmapImg && planSurfaceMap ? (
             <KonvaImage
               image={heatmapImg}
               x={
@@ -722,11 +871,17 @@ export function PlanCanvas(_props: PlanCanvasProps) {
                     e.cancelBubble = true;
                     setSelection({ kind: "source", id: src.id });
                   }}
+                  onDragMove={(e) => {
+                    e.cancelBubble = true;
+                    const p = stageToProject(e.target.x(), e.target.y(), transform);
+                    setDragOverride({ kind: "source", id: src.id, x: p.x, y: p.y });
+                  }}
                   onDragEnd={(e) => {
                     e.cancelBubble = true;
                     const node = e.target;
                     const p = stageToProject(node.x(), node.y(), transform);
                     updateSourcePosition(p.x, p.y, src.position.z);
+                    setDragOverride(null);
                   }}
                 >
                   <Circle
@@ -754,9 +909,17 @@ export function PlanCanvas(_props: PlanCanvasProps) {
               const lp = stale
                 ? undefined
                 : planLpOverlay?.byWorkplaceId[wp.id];
+              const draggingThis =
+                dragOverride !== null &&
+                (dragOverride.kind === "source" || dragOverride.id === wp.id);
               const lpLabel =
-                typeof lp === "number" && Number.isFinite(lp)
+                !draggingThis && typeof lp === "number" && Number.isFinite(lp)
                   ? `${lp.toFixed(1)} дБ`
+                  : null;
+              const est = estimateByWorkplaceId.get(wp.id);
+              const estLabel =
+                lpLabel === null && est !== undefined
+                  ? `${ru.model.estimatePrefix}${est.toFixed(1)} дБ`
                   : null;
               return (
                 <Group
@@ -777,11 +940,17 @@ export function PlanCanvas(_props: PlanCanvasProps) {
                     e.cancelBubble = true;
                     setSelection({ kind: "workplace", id: wp.id });
                   }}
+                  onDragMove={(e) => {
+                    e.cancelBubble = true;
+                    const p = stageToProject(e.target.x(), e.target.y(), transform);
+                    setDragOverride({ kind: "workplace", id: wp.id, x: p.x, y: p.y });
+                  }}
                   onDragEnd={(e) => {
                     e.cancelBubble = true;
                     const node = e.target;
                     const p = stageToProject(node.x(), node.y(), transform);
                     updateWorkplacePosition(p.x, p.y, wp.position.z);
+                    setDragOverride(null);
                   }}
                 >
                   <Circle
@@ -804,6 +973,15 @@ export function PlanCanvas(_props: PlanCanvasProps) {
                       fill="#0b3d2c"
                       fontStyle="bold"
                       x={-22}
+                      y={16}
+                    />
+                  ) : estLabel ? (
+                    <Text
+                      text={estLabel}
+                      fontSize={10}
+                      fill="#4a5565"
+                      fontStyle="italic"
+                      x={-24}
                       y={16}
                     />
                   ) : null}
