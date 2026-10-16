@@ -159,3 +159,4 @@ engine/scripts/apply-spps-patches.py
 engine/scripts/prepare-official-spps-control.py
 engine/scripts/patch-tetramesh-idvolume.py
 engine/patches/0002-spps-link-all-tetras-within-rayon.patch
+.github/workflows/build-spps.yml

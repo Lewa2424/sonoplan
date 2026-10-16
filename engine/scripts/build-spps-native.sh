@@ -52,9 +52,15 @@ if [[ "${ACTUAL}" != "${COMMIT}" ]]; then
   exit 1
 fi
 
-# SonoPlan patches (punctual deposit-on-start-tetra; ENG-009 status later)
+# SonoPlan patches (deposit-on-start-tetra + link-all-tetras-within-rayon)
 echo "Applying SPPS patches via apply-spps-patches.py ..."
 python3 "${ENGINE_DIR}/scripts/apply-spps-patches.py" "${SRC}"
+# Fail fast if the UTILISER-path smoke fix is missing (string fallback must land).
+if ! grep -q "SonoPlan: ensure every tetra that can intersect" \
+    "${SRC}/src/spps/sppsInitialisation.cpp"; then
+  echo "ERROR: patch 0002 (link-all-tetras) not present after apply" >&2
+  exit 1
+fi
 
 mkdir -p "${SRC}/build" "${DIST_DIR}" "${CPM_SOURCE_CACHE}"
 cd "${SRC}/build"
@@ -74,8 +80,14 @@ if [[ -z "${SPPS_BIN}" ]]; then
 fi
 
 cp -a "${SPPS_BIN}" "${DIST_DIR}/spps"
-printf 'SPPS_BIN=%s\nISIMPA_COMMIT=%s\nBUILD_TYPE=%s\n' \
-  "${SPPS_BIN}" "${COMMIT}" "${BUILD_TYPE}" > "${DIST_DIR}/ORIGIN.txt"
+# Fail the job if the patched marker never made it into the linked binary.
+if ! grep -a -q "sonoplan-deposit-start-tetra-v2" "${DIST_DIR}/spps"; then
+  echo "ERROR: patched marker not found inside spps binary (stale/unpatched build)" >&2
+  exit 1
+fi
+printf 'SPPS_BIN=%s\nISIMPA_COMMIT=%s\nBUILD_TYPE=%s\nSONOPLAN_PATCH=%s\n' \
+  "${SPPS_BIN}" "${COMMIT}" "${BUILD_TYPE}" "deposit-start-tetra-v2" \
+  > "${DIST_DIR}/ORIGIN.txt"
 
 (
   cd "${DIST_DIR}"
