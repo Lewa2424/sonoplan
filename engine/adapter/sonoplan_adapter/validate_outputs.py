@@ -7,9 +7,47 @@ from typing import Iterable
 
 from .contracts import DEFAULT_OUTPUT_SPECS, OutputFileSpec, SppsRunResult
 
+_STATS_SPEC = OutputFileSpec(
+    relative_path="statsSPPS.gabe",
+    required=False,
+    min_bytes=1,
+    description="SPPS statistics (gabe); particle-loss ratio lives here when present",
+)
+
 
 class OutputValidationError(Exception):
     """Raised when outputs are missing, empty, or structurally invalid."""
+
+
+def discover_punctual_output_specs(work_dir: Path) -> tuple[OutputFileSpec, ...]:
+    """Require every found punctual Sound level.recp; else a clear missing gate.
+
+    Product export jobs name receivers from workplaces (not fixture ``r_near``).
+    """
+    root = work_dir / "Punctual receivers"
+    found: list[OutputFileSpec] = []
+    if root.is_dir():
+        for path in sorted(root.glob("*/Sound level.recp")):
+            rel = path.relative_to(work_dir).as_posix()
+            found.append(
+                OutputFileSpec(
+                    relative_path=rel,
+                    required=True,
+                    min_bytes=1,
+                    description=f"Punctual receiver sound level ({rel})",
+                )
+            )
+    if found:
+        return tuple(found) + (_STATS_SPEC,)
+    return (
+        OutputFileSpec(
+            relative_path="Punctual receivers/<receiver>/Sound level.recp",
+            required=True,
+            min_bytes=1,
+            description="At least one punctual Sound level.recp required",
+        ),
+        _STATS_SPEC,
+    )
 
 
 def check_output_files(
@@ -44,15 +82,21 @@ def evaluate_run(
     stdout: str = "",
     stderr: str = "",
     duration_s: float = 0.0,
-    specs: Iterable[OutputFileSpec] = DEFAULT_OUTPUT_SPECS,
+    specs: Iterable[OutputFileSpec] | None = None,
 ) -> SppsRunResult:
     """Decide success from exit code AND output integrity.
 
     Documented upstream issue (ENG-009 / TZ S05): main() often returns 0 even
     when MainProcess fails. Missing/empty required outputs => failed.
+
+    When ``specs`` is None, discover punctual ``Sound level.recp`` under the
+    workdir (product export + fixture layouts).
     """
     reasons: list[str] = []
-    checks = check_output_files(work_dir, specs)
+    resolved = (
+        tuple(specs) if specs is not None else discover_punctual_output_specs(work_dir)
+    )
+    checks = check_output_files(work_dir, resolved)
 
     # Non-zero exit is always a failure signal when present.
     if exit_code != 0:

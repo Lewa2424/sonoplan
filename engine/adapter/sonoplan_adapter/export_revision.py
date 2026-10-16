@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .cbin_io import Face, read_cbin, scale_mesh_to_box, write_cbin
-from .mbin_io import read_mbin, scale_tetra_to_box, write_mbin
+from .cbin_io import scale_cbin_file_inplace
+from .mbin_io import scale_mbin_file_inplace
 
 FREQS = [
     20000, 16000, 12500, 10000, 8000, 6300, 5000, 4000, 3150, 2500, 2000,
@@ -328,27 +328,25 @@ def write_spps_workdir(
     if not template_cbin.is_file() or not template_mbin.is_file():
         raise FileNotFoundError(f"fixture inputs missing under {fixture_inputs}")
 
-    surf = scale_mesh_to_box(
-        read_cbin(template_cbin),
+    # In-place float patch of official cube binaries (preserve pad/groupName).
+    # Full rewrite via write_cbin zeroed those bytes and led to SPPS SIGSEGV (-11)
+    # after "mesh loaded successfully" when loading tetramesh.
+    scale_cbin_file_inplace(
+        template_cbin,
+        out_dir / "mesh.cbin",
         width_m=width,
         depth_m=depth,
         height_m=height,
         ref_size=REF_CUBE_M,
     )
-    # Match retrocompat cube materials: idMat=0, idRs=-1
-    surf.faces = [
-        Face(f.a, f.b, f.c, id_mat=0, id_rs=-1, id_en=-1) for f in surf.faces
-    ]
-    write_cbin(out_dir / "mesh.cbin", surf)
-
-    tetra = scale_tetra_to_box(
-        read_mbin(template_mbin),
+    scale_mbin_file_inplace(
+        template_mbin,
+        out_dir / "tetramesh.mbin",
         width_m=width,
         depth_m=depth,
         height_m=height,
         ref_size=REF_CUBE_M,
     )
-    write_mbin(out_dir / "tetramesh.mbin", tetra)
 
     tree = build_config_xml(payload)
     tree.write(out_dir / "config.xml", encoding="utf-8", xml_declaration=True)
@@ -356,7 +354,7 @@ def write_spps_workdir(
         shutil.copy2(speaker, out_dir / "speaker-test3.txt")
 
     notes = [
-        "Phase 2A: SPPS box mesh scaled from official cube topology to room AABB.",
+        "Phase 2A: SPPS box mesh scaled in-place from official cube cbin/mbin to room AABB.",
         f"Box {width:.3g}×{depth:.3g}×{height:.3g} m; sources/workplaces from revision.",
     ]
     if not exact:

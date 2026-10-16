@@ -118,3 +118,62 @@ def scale_mesh_to_box(
     sz = height_m / ref_size
     verts = [(x * sx, y * sy, z * sz) for x, y, z in mesh.vertices]
     return SurfaceMesh(vertices=verts, faces=list(mesh.faces))
+
+
+def scale_cbin_file_inplace(
+    src: Path,
+    dst: Path,
+    *,
+    width_m: float,
+    depth_m: float,
+    height_m: float,
+    ref_size: float = 5.0,
+) -> SurfaceMesh:
+    """Scale vertex floats in-place; preserve official cbin layout/padding.
+
+    ``write_cbin`` zeros uninitialized pad/groupName bytes that the I-Simpa
+    cube fixture still carries. SPPS loads that rewritten surface, then can
+    SIGSEGV on tetramesh — keep the binary shell byte-identical except coords.
+    """
+    data = bytearray(src.read_bytes())
+    maj, minor = struct.unpack_from("<II", data, 0)
+    if maj != DEFAULT_MAJOR or minor != DEFAULT_MINOR:
+        raise ValueError(f"unsupported cbin version {maj}.{minor}")
+    sx = width_m / ref_size
+    sy = depth_m / ref_size
+    sz = height_m / ref_size
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[Face] = []
+    off = 8
+    next_brother = 1
+    while next_brother != 0 and off + 12 <= len(data):
+        node_type, _pad, _first_son, next_brother = struct.unpack_from(
+            "<HHII", data, off
+        )
+        off += 12
+        if node_type == NODE_VERTICES:
+            (n_vert,) = struct.unpack_from("<I", data, off)
+            off += 4
+            for _ in range(n_vert):
+                x, y, z = struct.unpack_from("<fff", data, off)
+                nx, ny, nz = x * sx, y * sy, z * sz
+                struct.pack_into("<fff", data, off, nx, ny, nz)
+                vertices.append((nx, ny, nz))
+                off += 12
+        elif node_type == NODE_GROUP:
+            off += 255  # groupName (preserve bytes)
+            off += 1
+            (n_face,) = struct.unpack_from("<I", data, off)
+            off += 4
+            for _ in range(n_face):
+                a, b, c, id_mat, id_rs, id_en = struct.unpack_from(
+                    "<IIIIii", data, off
+                )
+                faces.append(Face(a, b, c, id_mat, id_rs, id_en))
+                off += 20
+        else:
+            raise ValueError(f"unknown cbin node type {node_type}")
+        if next_brother != 0:
+            off = int(next_brother)
+    dst.write_bytes(bytes(data))
+    return SurfaceMesh(vertices=vertices, faces=faces)

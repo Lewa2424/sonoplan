@@ -6,12 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from sonoplan_adapter.cbin_io import read_cbin
+from sonoplan_adapter.cbin_io import read_cbin, scale_cbin_file_inplace
 from sonoplan_adapter.export_revision import (
     compact_export_payload,
     write_spps_workdir,
 )
-from sonoplan_adapter.mbin_io import read_mbin
+from sonoplan_adapter.mbin_io import read_mbin, scale_mbin_file_inplace
+from sonoplan_adapter.validate_outputs import discover_punctual_output_specs
 
 
 def _rect_snapshot(*, w: float = 20.0, d: float = 12.0, h: float = 6.0) -> dict:
@@ -86,6 +87,52 @@ class ExportRevisionTests(unittest.TestCase):
             cfg = (out / "config.xml").read_text(encoding="utf-8")
             self.assertIn('name="Fan"', cfg)
             self.assertIn("RM-1", cfg)
+            # In-place scale must preserve non-coordinate fixture bytes
+            orig = (fixture / "mesh.cbin").read_bytes()
+            scaled = (out / "mesh.cbin").read_bytes()
+            self.assertEqual(len(orig), len(scaled))
+            self.assertEqual(orig[8:10], scaled[8:10])  # node type
+            self.assertEqual(orig[10:12], scaled[10:12])  # pad (not zeroed)
+
+    def test_inplace_identity_scale_preserves_fixture_bytes(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        fixture = root / "fixtures" / "minimal_room" / "inputs"
+        if not (fixture / "mesh.cbin").is_file():
+            self.skipTest("fixture mesh missing")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            scale_cbin_file_inplace(
+                fixture / "mesh.cbin",
+                out / "mesh.cbin",
+                width_m=5.0,
+                depth_m=5.0,
+                height_m=5.0,
+            )
+            scale_mbin_file_inplace(
+                fixture / "tetramesh.mbin",
+                out / "tetramesh.mbin",
+                width_m=5.0,
+                depth_m=5.0,
+                height_m=5.0,
+            )
+            self.assertEqual(
+                (fixture / "mesh.cbin").read_bytes(),
+                (out / "mesh.cbin").read_bytes(),
+            )
+            self.assertEqual(
+                (fixture / "tetramesh.mbin").read_bytes(),
+                (out / "tetramesh.mbin").read_bytes(),
+            )
+
+    def test_discover_punctual_specs_uses_workplace_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            recp = work / "Punctual receivers" / "RM-1" / "Sound level.recp"
+            recp.parent.mkdir(parents=True)
+            recp.write_bytes(b"\x00\x01")
+            specs = discover_punctual_output_specs(work)
+            paths = [s.relative_path for s in specs if s.required]
+            self.assertEqual(paths, ["Punctual receivers/RM-1/Sound level.recp"])
 
 
 if __name__ == "__main__":

@@ -76,10 +76,12 @@ def run_spps(request: SppsRunRequest) -> SppsRunResult:
             failure_reasons=[f"spps_executable_not_found:{exe}"],
         )
 
+    # Discover punctual Sound level.recp (fixture r_* or export workplace names).
     return evaluate_run(
         exit_code=completed.returncode,
         work_dir=work,
         stdout=completed.stdout or "",
         stderr=completed.stderr or "",
         duration_s=time.perf_counter() - t0,
+        specs=None,
     )

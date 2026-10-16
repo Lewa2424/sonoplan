@@ -62,3 +62,38 @@ def scale_tetra_to_box(
     sz = height_m / ref_size
     nodes = [(x * sx, y * sy, z * sz) for x, y, z in mesh.nodes]
     return TetraMesh(nodes=nodes, tetras=list(mesh.tetras))
+
+
+def scale_mbin_file_inplace(
+    src: Path,
+    dst: Path,
+    *,
+    width_m: float,
+    depth_m: float,
+    height_m: float,
+    ref_size: float = 5.0,
+) -> TetraMesh:
+    """Scale node floats in-place; leave tetra topology payload untouched."""
+    data = bytearray(src.read_bytes())
+    n_tetra, n_nodes = struct.unpack_from("<II", data, 0)
+    sx = width_m / ref_size
+    sy = depth_m / ref_size
+    sz = height_m / ref_size
+    nodes: list[tuple[float, float, float]] = []
+    off = 8
+    for _ in range(n_nodes):
+        x, y, z = struct.unpack_from("<fff", data, off)
+        nx, ny, nz = x * sx, y * sy, z * sz
+        struct.pack_into("<fff", data, off, nx, ny, nz)
+        nodes.append((nx, ny, nz))
+        off += 12
+    tetra_bytes = 4 * 4 + 4 + 4 * (3 * 4 + 4 + 4)
+    tetras: list[bytes] = []
+    for _ in range(n_tetra):
+        raw = data[off : off + tetra_bytes]
+        if len(raw) != tetra_bytes:
+            raise ValueError("truncated mbin tetra payload")
+        tetras.append(bytes(raw))
+        off += tetra_bytes
+    dst.write_bytes(bytes(data))
+    return TetraMesh(nodes=nodes, tetras=tetras)
