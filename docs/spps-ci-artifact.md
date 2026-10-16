@@ -6,19 +6,19 @@ Pinned build from GitHub Actions — **не коммитить** бинарни�
 
 | Поле | Значение |
 |------|----------|
-| Run | [38878095021](https://github.com/Lewa2424/sonoplan/actions/runs/38878095021) |
+| Run | [38879414939](https://github.com/Lewa2424/sonoplan/actions/runs/38879414939) |
 | Repo | `Lewa2424/sonoplan` |
 | Artifact | `spps-linux-x86_64-929a5c8e5f59` |
 | I-Simpa commit | `929a5c8e5f590b189f29155faeff8670f3699479` |
-| SHA-256 (`spps`) | `c5e30a7b1647ed73b26aae58815914a55cc1785223f954ba7e12b3eda0234eb5` |
+| SHA-256 (`spps`) | `918397477af40d73e6ee96ff7748db1a705b6df6d1ede13ec85d0043f2c42d16` |
 | Дата pin | 2026-10-16 |
-| Примечание | Pin после `0d63e1b` (deposit-on-start-tetra). SHA совпал с предыдущим артефактом — критерий приёмки: `energySumGlobal > 0` в Run SPPS Job. |
+| Примечание | Pin после `cf58575` (patches 0001+0002). Критерий: `energySumGlobal > 0` / конечный `lpDb` в Run SPPS Job. |
 
 ## Скачать (gh CLI)
 
 ```bash
 # из корня репозитория SonoPlan
-gh run download 38878095021 --repo Lewa2424/sonoplan -D engine/binaries/spps-ci/
+gh run download 38879414939 --repo Lewa2424/sonoplan -D engine/binaries/spps-ci/
 ```
 
 Локальный путь к бинарнику после download:
@@ -29,7 +29,7 @@ gh run download 38878095021 --repo Lewa2424/sonoplan -D engine/binaries/spps-ci/
 
 ```powershell
 (Get-FileHash engine\binaries\spps-ci\spps-linux-x86_64-929a5c8e5f59\spps -Algorithm SHA256).Hash.ToLower()
-# ожидается: c5e30a7b1647ed73b26aae58815914a55cc1785223f954ba7e12b3eda0234eb5
+# ожидается: 918397477af40d73e6ee96ff7748db1a705b6df6d1ede13ec85d0043f2c42d16
 ```
 
 Linux:
@@ -39,14 +39,14 @@ sha256sum engine/binaries/spps-ci/spps-linux-x86_64-929a5c8e5f59/spps
 # или сравнить с engine/.../SHA256SUMS из артефакта
 ```
 
-## Содержимое artifact (run 38878095021)
+## Содержимое artifact (run 38879414939)
 
 | Файл | Размер (байт) |
 |------|----------------|
-| `spps` | 1 119 800 |
-| `spps-linux-x86_64-929a5c8e5f59.tar.gz` | 435 465 |
-| `ORIGIN.txt` | 160 |
-| `SHA256SUMS` | 71 |
+| `spps` | (см. artifact) |
+| `spps-linux-x86_64-929a5c8e5f59.tar.gz` | (см. artifact) |
+| `ORIGIN.txt` | (см. artifact) |
+| `SHA256SUMS` | `918397477af40d73e6ee96ff7748db1a705b6df6d1ede13ec85d0043f2c42d16  spps` |
 
 ## Worker / адаптер
 
