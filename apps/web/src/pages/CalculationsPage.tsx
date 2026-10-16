@@ -3,6 +3,10 @@ import { ApiError, NetworkError } from "../api/client";
 import { cancelJob, createJob, getJob, newIdempotencyKey } from "../api/jobsApi";
 import type { JobResponse, PunctualReceiverSummary } from "../api/types";
 import { ru } from "../i18n/ru";
+import {
+  computeLpScale,
+  formatLpScaleLegend,
+} from "../model/lpPalette";
 import { useEditorStore } from "../store/editorStore";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
@@ -479,9 +483,20 @@ export function CalculationsPage() {
                 <>
                   <p className="page-meta">{ru.calculations.mapReady}</p>
                   <p className="page-meta">
-                    {ru.calculations.mapLegend}: &gt;100 красный · 90–100
-                    оранжевый · 80–90 жёлтый · &lt;80 зелёный
+                    {ru.calculations.mapLegend}:{" "}
+                    {(() => {
+                      const g = (
+                        manifest as {
+                          grid?: { lpDb?: (number | null)[] } | null;
+                        } | null
+                      )?.grid;
+                      const scale = g?.lpDb ? computeLpScale(g.lpDb) : null;
+                      return scale
+                        ? formatLpScaleLegend(scale)
+                        : ru.calculations.mapLegendHint;
+                    })()}
                   </p>
+                  <p className="page-hint">{ru.calculations.mapLegendHint}</p>
                 </>
               ) : (
                 <>

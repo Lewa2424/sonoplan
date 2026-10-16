@@ -14,7 +14,11 @@ import {
   openPolylineCornerAngleDeg,
   POLYGON_CLOSE_SNAP_M,
 } from "../model/contourHelpers";
-import { surfaceMapToDataUrl } from "../model/lpPalette";
+import {
+  computeLpScale,
+  formatLpScaleLegend,
+  surfaceMapToDataUrl,
+} from "../model/lpPalette";
 import { useEditorStore } from "../store/editorStore";
 
 const STAGE_PAD = 24;
@@ -205,14 +209,20 @@ export function PlanCanvas(_props: PlanCanvasProps) {
     toolMode === "drawPolygon" || placeMode !== "none" || placingCatalog;
   const stale = isPlanResultStale();
 
-  const heatmapUrl = useMemo(() => {
+  const mapScale = useMemo(() => {
     if (!planSurfaceMap || stale) return null;
+    return computeLpScale(planSurfaceMap.lpDb);
+  }, [planSurfaceMap, stale]);
+
+  const heatmapUrl = useMemo(() => {
+    if (!planSurfaceMap || stale || !mapScale) return null;
     return surfaceMapToDataUrl({
       nx: planSurfaceMap.nx,
       ny: planSurfaceMap.ny,
       lpDb: planSurfaceMap.lpDb,
+      scale: mapScale,
     });
-  }, [planSurfaceMap, stale]);
+  }, [planSurfaceMap, stale, mapScale]);
 
   useEffect(() => {
     if (!heatmapUrl) {
@@ -416,6 +426,11 @@ export function PlanCanvas(_props: PlanCanvasProps) {
       </div>
       {stale && (planLpOverlay || planSurfaceMap) ? (
         <p className="banner banner--warn">{ru.model.staleLp}</p>
+      ) : null}
+      {heatmapImg && planSurfaceMap && mapScale && !stale ? (
+        <p className="page-meta plan-map-scale" aria-live="polite">
+          {ru.calculations.mapScaleOnPlan}: {formatLpScaleLegend(mapScale)}
+        </p>
       ) : null}
       <div className="plan-stage-host" ref={stageHostRef}>
       <Stage

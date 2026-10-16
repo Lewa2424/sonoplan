@@ -191,8 +191,8 @@ engine/adapter/tests/test_export_revision.py
 apps/web/src/model/materialCatalog.ts
 apps/web/src/model/equipmentCatalog.ts
 apps/web/src/model/lpPalette.ts
+apps/web/src/model/lpPalette.test.ts
 apps/web/src/hooks/useRunCalculation.ts
 engine/adapter/sonoplan_adapter/rsbin_io.py
 engine/adapter/tests/test_rsbin_io.py
 engine/adapter/tests/test_csbin_path_slash.py
-apps/web/src/components/PlanCanvas.tsx
