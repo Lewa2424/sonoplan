@@ -64,6 +64,8 @@ export function CalculationsPage() {
 
   useEffect(() => () => stopPoll(), [stopPoll]);
 
+  const setPlanSurfaceMap = useEditorStore((s) => s.setPlanSurfaceMap);
+
   const applyLevelsFromJob = useCallback(
     (next: JobResponse) => {
       if (next.status !== "completed") return;
@@ -103,7 +105,7 @@ export function CalculationsPage() {
         } | null
       )?.grid;
       if (
-        manifest?.mapAvailable === true &&
+        hasMap &&
         grid &&
         typeof grid.originX === "number" &&
         typeof grid.originY === "number" &&
@@ -126,9 +128,16 @@ export function CalculationsPage() {
             lpDb: grid.lpDb,
           },
         });
+      } else {
+        // Drop legacy sparse blotch from a prior job.
+        setPlanSurfaceMap(null);
       }
     },
-    [applyPunctualLpToWorkplaces, applySurfaceMapFromManifest],
+    [
+      applyPunctualLpToWorkplaces,
+      applySurfaceMapFromManifest,
+      setPlanSurfaceMap,
+    ],
   );
 
   const refreshJob = useCallback(

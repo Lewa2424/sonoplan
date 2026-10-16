@@ -885,6 +885,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       set({ planSurfaceMap: null });
       return;
     }
+    // Do not paint sparse blotches (legacy jobs / coplanar coupe).
+    const filled = grid.lpDb.filter((v) => v !== null && v !== undefined).length;
+    if (filled / grid.lpDb.length < 0.45) {
+      set({ planSurfaceMap: null });
+      return;
+    }
     const cellY =
       typeof grid.cellSizeYM === "number" && grid.cellSizeYM > 0
         ? grid.cellSizeYM

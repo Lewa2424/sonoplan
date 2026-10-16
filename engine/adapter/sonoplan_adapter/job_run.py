@@ -159,14 +159,27 @@ def build_result_manifest(
     surface = (decoded or {}).get("surface") or None
     grid = None
     map_available = False
+    map_fill_ratio = 0.0
+    # Sparse/diagonal blotches (e.g. coplanar sources) must not ship as a "map".
+    _MIN_MAP_FILL = 0.45
     if isinstance(surface, dict):
-        grid = surface.get("grid")
-        if isinstance(grid, dict) and grid.get("lpDb"):
-            map_available = any(v is not None for v in (grid.get("lpDb") or []))
+        cand = surface.get("grid")
+        if isinstance(cand, dict) and cand.get("lpDb"):
+            lp_cells = list(cand.get("lpDb") or [])
+            filled = sum(1 for v in lp_cells if v is not None)
+            map_fill_ratio = (filled / len(lp_cells)) if lp_cells else 0.0
+            if filled > 0 and map_fill_ratio >= _MIN_MAP_FILL:
+                grid = cand
+                map_available = True
 
     # Surface heatmap only from decoded .csbin — never invented from punctual.
     if map_available:
         map_deferred = None
+    elif attempt.ok and decode_ok and punctual and map_fill_ratio > 0:
+        map_deferred = (
+            f"Surface grid fill {map_fill_ratio:.0%} below {_MIN_MAP_FILL:.0%} "
+            "— map not published (sparse coupe; check source vs cut Z)."
+        )
     elif attempt.ok and decode_ok and punctual:
         map_deferred = (
             "Punctual .recp decoded (energy p^2-homogeneous). "

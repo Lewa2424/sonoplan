@@ -82,6 +82,16 @@ class ExportRevisionTests(unittest.TestCase):
         self.assertAlmostEqual(p["absorptionByBand"]["1000"], 0.7)
         self.assertEqual(p["solidCount"], 1)
         self.assertIn("coupeZM", p)
+        # Sources at z=1.5 → coupe must leave clearance (not coplanar blotch).
+        self.assertGreaterEqual(abs(float(p["coupeZM"]) - 1.5), 0.35)
+
+    def test_coupe_z_away_from_coplanar_sources(self) -> None:
+        from sonoplan_adapter.export_revision import _coupe_z_away_from_sources
+
+        z = _coupe_z_away_from_sources(
+            preferred_z=1.5, source_zs=[1.5, 1.5], height_m=6.0
+        )
+        self.assertGreaterEqual(abs(z - 1.5), 0.35)
 
     def test_write_workdir_scales_mesh(self) -> None:
         root = Path(__file__).resolve().parents[2]

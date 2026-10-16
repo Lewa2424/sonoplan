@@ -143,14 +143,14 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
             }
         )
     workplaces = []
-    coupe_z = 1.5
+    wp_zs: list[float] = []
     for w in snapshot.get("workplaces") or []:
         pos = w.get("position") or {}
         rh = float((w.get("receiverHeightM") or {}).get("value") or 1.5)
         z = float(pos.get("z") or 0)
         # Receiver height above floor if z≈0
         recv_z = z if z > 0.05 else rh
-        coupe_z = recv_z
+        wp_zs.append(recv_z)
         workplaces.append(
             {
                 "id": w.get("id"),
@@ -160,6 +160,12 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
                 "z": recv_z,
             }
         )
+    source_zs = [float(s["z"]) for s in sources]
+    coupe_z = _coupe_z_away_from_sources(
+        preferred_z=(sum(wp_zs) / len(wp_zs) if wp_zs else 1.5),
+        source_zs=source_zs,
+        height_m=height,
+    )
     solids = snapshot.get("solids") or []
     return {
         "schemaVersion": "1.0",
@@ -177,6 +183,38 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
         "coupeZM": coupe_z,
         "solidCount": len(solids),
     }
+
+
+def _coupe_z_away_from_sources(
+    *,
+    preferred_z: float,
+    source_zs: list[float],
+    height_m: float,
+    min_sep_m: float = 0.35,
+) -> float:
+    """Cutting plane must not sit on source Z — coplanar start → almost no crossings."""
+    lo, hi = 0.15, max(height_m - 0.15, 0.2)
+    preferred = min(max(preferred_z, lo), hi)
+    candidates = [
+        preferred,
+        preferred - min_sep_m,
+        preferred + min_sep_m,
+        preferred - 2 * min_sep_m,
+        preferred + 2 * min_sep_m,
+        1.2,
+        1.8,
+        lo + 0.1,
+        hi - 0.1,
+    ]
+    for z in candidates:
+        zc = min(max(z, lo), hi)
+        if not source_zs:
+            return zc
+        if all(abs(zc - sz) >= min_sep_m for sz in source_zs):
+            return zc
+    # Last resort: midway between floor and lowest source
+    lowest = min(source_zs) if source_zs else preferred
+    return min(max(lowest - min_sep_m, lo), hi)
 
 
 def _lw_for_freq(lw_by_band: dict[str, float], freq: int) -> float:
@@ -348,9 +386,14 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
             bf.set("freq", str(freq))
             bf.set("db", "-200")
 
-    # Horizontal cutting plane at workplace height (honest SPPS surface map path).
+    # Horizontal cutting plane — keep clear of source Z (crossing-based deposit).
     coupe_z = float(payload.get("coupeZM") or 1.5)
+    source_zs = [float(s.get("z") or 0) for s in sources]
+    coupe_z = _coupe_z_away_from_sources(
+        preferred_z=coupe_z, source_zs=source_zs, height_m=height
+    )
     coupe_z = min(max(coupe_z, 0.1), height - 0.05)
+    payload["coupeZM"] = coupe_z
     # Cell size: ~0.5 m, capped so grid stays tractable on large rooms.
     resolution = min(0.5, max(0.25, min(width, depth) / 40.0))
     recepteurss = ET.SubElement(root, "recepteurss")
@@ -421,7 +464,10 @@ def write_spps_workdir(
     notes = [
         "Phase 2A: SPPS box mesh scaled in-place from official cube cbin/mbin to room AABB.",
         f"Box {width:.3g}×{depth:.3g}×{height:.3g} m; sources/workplaces from revision.",
-        "Horizontal coupe plane exported for surface map (rs_cut.csbin) when SPPS writes it.",
+        (
+            f"Horizontal coupe at z={float(payload.get('coupeZM') or 0):.2f} m "
+            "(offset from source Z so SPPS can record plane crossings)."
+        ),
     ]
     if payload.get("absorptionByBand"):
         notes.append("Surface absorption α from revision materials (estimated catalog OK).")

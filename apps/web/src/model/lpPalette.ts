@@ -79,12 +79,13 @@ export function surfaceMapToDataUrl(args: {
   if (typeof document === "undefined") return null;
   const scale = args.scale ?? computeLpScale(lpDb);
   if (!scale) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = nx;
-  canvas.height = ny;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  const img = ctx.createImageData(nx, ny);
+  // Native cell bitmap, then upsample with smoothing for less "LEGO" on phone.
+  const src = document.createElement("canvas");
+  src.width = nx;
+  src.height = ny;
+  const sctx = src.getContext("2d");
+  if (!sctx) return null;
+  const img = sctx.createImageData(nx, ny);
   for (let j = 0; j < ny; j++) {
     for (let i = 0; i < nx; i++) {
       // row 0 = min Y (project); canvas y grows down → flip
@@ -98,6 +99,14 @@ export function surfaceMapToDataUrl(args: {
       img.data[o + 3] = a;
     }
   }
-  ctx.putImageData(img, 0, 0);
+  sctx.putImageData(img, 0, 0);
+  const up = 4;
+  const canvas = document.createElement("canvas");
+  canvas.width = nx * up;
+  canvas.height = ny * up;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/png");
 }

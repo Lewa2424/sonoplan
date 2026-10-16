@@ -25,6 +25,7 @@ export function useRunCalculation() {
   const applySurfaceMapFromManifest = useEditorStore(
     (s) => s.applySurfaceMapFromManifest,
   );
+  const setPlanSurfaceMap = useEditorStore((s) => s.setPlanSurfaceMap);
 
   const [job, setJob] = useState<JobResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,9 +103,15 @@ export function useRunCalculation() {
             lpDb: grid.lpDb,
           },
         });
+      } else {
+        setPlanSurfaceMap(null);
       }
     },
-    [applyPunctualLpToWorkplaces, applySurfaceMapFromManifest],
+    [
+      applyPunctualLpToWorkplaces,
+      applySurfaceMapFromManifest,
+      setPlanSurfaceMap,
+    ],
   );
 
   const refreshJob = useCallback(
