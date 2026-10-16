@@ -441,3 +441,90 @@ body {
     max-width: 320px;
   }
 }
+
+.page-error {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--error-bg);
+  color: var(--error);
+  font-size: 0.9rem;
+}
+
+.calc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.calc-job {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.calc-job h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.calc-dl {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.calc-dl > div {
+  display: grid;
+  gap: 2px;
+}
+
+.calc-dl dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.calc-dl dd {
+  margin: 0;
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.mono-wrap {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.job-status {
+  font-weight: 650;
+}
+
+.job-status--completed {
+  color: var(--ok);
+}
+
+.job-status--failed,
+.job-status--cancelled {
+  color: var(--error);
+}
+
+.job-status--running,
+.job-status--queued,
+.job-status--created {
+  color: var(--accent);
+}
+
+.calc-manifest {
+  margin-top: 14px;
+}
+
+.calc-paths,
+.calc-notes {
+  margin: 8px 0 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}

@@ -1,8 +1,10 @@
-"""Celery app stub. Adapter/SPPS will be wired after STG-01."""
+"""Celery worker: run calculation jobs via engine/adapter (no fake maps)."""
 
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 from celery import Celery
 
@@ -20,17 +22,49 @@ app.conf.update(
 )
 
 
-@app.task(name="sonoplan.run_calculation")
-def run_calculation(job_id: str, revision_id: str) -> dict[str, object]:
-    """
-    Placeholder task.
+def _ensure_api_and_adapter_on_path() -> None:
+    repo = Path(__file__).resolve().parents[4]
+    api_src = repo / "services" / "api" / "src"
+    adapter = repo / "engine" / "adapter"
+    for path in (api_src, adapter):
+        if path.is_dir() and str(path) not in sys.path:
+            sys.path.insert(0, str(path))
 
-    Will call engine/adapter → SPPS later. Must not invent acoustic results.
+
+@app.task(name="sonoplan.run_calculation", bind=True)
+def run_calculation(self, job_id: str, revision_id: str) -> dict[str, object]:
     """
-    return {
-        "stub": True,
-        "jobId": job_id,
-        "revisionId": revision_id,
-        "status": "not_implemented",
-        "note": "Adapter/SPPS not connected; no acoustic output produced",
-    }
+    Load job from DB and execute through adapter.
+
+    Must not invent acoustic results. Missing SPPS_BIN / non-Linux → failed with code.
+    """
+    _ensure_api_and_adapter_on_path()
+
+    from sqlalchemy.orm import sessionmaker
+
+    from sonoplan_api.db import make_engine
+    from sonoplan_api.job_execution import execute_job
+    import sonoplan_api.models  # noqa: F401 — register ORM
+
+    engine = make_engine()
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = SessionLocal()
+    try:
+        job = execute_job(db, job_id)
+        if job is None:
+            return {
+                "jobId": job_id,
+                "revisionId": revision_id,
+                "status": "failed",
+                "errorCode": "JOB_NOT_FOUND",
+            }
+        return {
+            "jobId": job.id,
+            "revisionId": job.revision_id,
+            "snapshotHash": job.snapshot_hash,
+            "status": job.status,
+            "errorCode": job.error_code,
+        }
+    finally:
+        db.close()
+        engine.dispose()

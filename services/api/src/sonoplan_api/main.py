@@ -1,19 +1,19 @@
-"""SonoPlan FastAPI application: health, capabilities stub, projects/draft/revisions."""
+"""SonoPlan FastAPI application: health, projects/draft/revisions, jobs."""
 
 from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from sonoplan_api.routers import projects, revisions, system
+from sonoplan_api.routers import jobs, projects, revisions, system
 
 app = FastAPI(
     title="SonoPlan API",
-    version="0.0.0-stg02",
+    version="0.0.0-stg04",
     description=(
-        "STG-02: projects, draft ETag, revisions, validate. "
-        "Acoustic calculation endpoints are not implemented yet. "
-        "Capabilities remain stub:true until STG-01 verifies SPPS."
+        "STG-04: projects, draft ETag, revisions, validate, calculation jobs. "
+        "Jobs bind to revisionId+snapshotHash; worker→adapter→SPPS. "
+        "No invented heatmaps. Capabilities remain stub:true until verified profile."
     ),
 )
 
@@ -33,3 +33,4 @@ app.add_middleware(
 app.include_router(system.router)
 app.include_router(projects.router)
 app.include_router(revisions.router)
+app.include_router(jobs.router)

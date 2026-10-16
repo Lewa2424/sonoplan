@@ -1,37 +1,46 @@
 # services/worker
 
-Заготовка Celery-приложения для расчётных заданий SonoPlan.
+Celery-приложение для расчётных заданий SonoPlan (STG-04).
 
 ## Назначение
 
 - Читать задания из очереди (RabbitMQ в `infra/docker-compose.yml`)
-- Запускать адаптер → SPPS в изолированном процессе
-- Публиковать манифест и файлы в object storage (MinIO/S3)
-- Heartbeat, отмена, постпроцессинг
+- Запускать `engine/adapter` → SPPS в изолированном процессе
+- Обновлять статус job в PostgreSQL (`failed` с кодом, если нет `SPPS_BIN` / не Linux)
+- Не публиковать фиктивные акустические карты
 
-## Сейчас
+## Поведение `sonoplan.run_calculation`
 
-Только каркас `sonoplan_worker.celery_app`. **Adapter и SPPS ещё не подключены** (STG-04).
+1. Загружает `jobs` row по `job_id`
+2. `check_spps_environment()` — на Windows / без `SPPS_BIN` → `failed` (`SPPS_NOT_LINUX` / `SPPS_BIN_MISSING`)
+3. `attempt_spps_calculation` на workdir (по умолчанию `engine/fixtures/minimal_room/inputs`)
+4. При отсутствии `config.xml` → `FIXTURE_INPUTS_MISSING` (блокер fixture, не фейковый result)
 
-Linux SPPS artifact уже собран в CI; checksum в `engine/PINNED.json`. На Linux-хосте worker’а:
+## Env
 
-```bash
-export SPPS_BIN=/path/to/spps   # см. docs/spps-ci-artifact.md и engine/adapter/README.md
-```
+| Переменная | Назначение |
+|------------|------------|
+| `CELERY_BROKER_URL` | RabbitMQ |
+| `DATABASE_URL` | та же БД, что у API |
+| `SPPS_BIN` | абсолютный путь к Linux `spps` |
+| `SONOPLAN_SPPS_WORK_DIR` | опционально: workdir вместо fixture inputs |
+| `SONOPLAN_JOBS_INLINE` | на стороне API: `1` (default) = выполнить в процессе API без Celery |
 
-Бинарник Linux на Windows-хосте разработчика не запускать. Не генерировать фиктивные акустические карты в worker.
+Linux SPPS: checksum в `engine/PINNED.json`. На Windows-хосте разработчика ELF не запускать.
 
-## Локальный запуск (после поднятия broker)
+## Локальный запуск
 
 ```bash
 cd services/worker
 python -m venv .venv
 .venv\Scripts\activate
 pip install -e ".[dev]"
+# также нужен editable API + adapter на PYTHONPATH (см. monorepo layout)
+pip install -e ../api
 
-# Broker из infra/.env.example
 set CELERY_BROKER_URL=amqp://sonoplan:sonoplan@localhost:5672//
+set DATABASE_URL=postgresql+psycopg://sonoplan:sonoplan@localhost:5432/sonoplan
 celery -A sonoplan_worker.celery_app worker --loglevel=info
 ```
 
-Точка стыковки со STG-01: вызов `engine/adapter` из задачи `run_calculation` (пока заглушка).
+Для локальной разработки без RabbitMQ API по умолчанию использует inline-исполнение (`SONOPLAN_JOBS_INLINE=1`).

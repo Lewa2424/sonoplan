@@ -5,11 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sonoplan-worker"
 version = "0.0.0"
-description = "SonoPlan Celery worker scaffold (connects to adapter later)"
+description = "SonoPlan Celery worker (STG-04: adapter/SPPS job execution)"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "celery[redis]>=5.4.0,<6",
+  "sqlalchemy>=2.0.36,<2.1",
+  "psycopg[binary]>=3.2.0,<4",
 ]
 
 [project.optional-dependencies]

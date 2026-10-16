@@ -84,3 +84,25 @@ class ValidateResponse(BaseModel):
     ok: bool
     errors: list[ValidationIssue]
     warnings: list[ValidationIssue]
+
+
+class JobCreate(BaseModel):
+    revisionId: str = Field(min_length=1)
+    # Optional client-side hash check; must match revision when provided.
+    snapshotHash: str | None = Field(default=None, min_length=64, max_length=64)
+
+
+class JobResponse(BaseModel):
+    id: str
+    projectId: str
+    revisionId: str
+    snapshotHash: str
+    status: str
+    errorCode: str | None = None
+    errorMessage: str | None = None
+    resultManifest: dict[str, Any] | None = None
+    cancelRequested: bool = False
+    createdAt: str
+    updatedAt: str
+    startedAt: str | None = None
+    finishedAt: str | None = None

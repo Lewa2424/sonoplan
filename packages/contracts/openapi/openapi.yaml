@@ -1,10 +1,11 @@
 openapi: 3.0.3
 info:
   title: SonoPlan API
-  version: 0.0.0-stg02
+  version: 0.0.0-stg04
   description: |
-    OpenAPI `/api/v1` (API-001). STG-02: projects, draft ETag, revisions, validate.
-    Capabilities — stub until STG-01 verifies SPPS. Jobs/results — ещё не реализованы.
+    OpenAPI `/api/v1` (API-001). STG-04: projects, draft ETag, revisions, validate, jobs.
+    Jobs bind to revisionId+snapshotHash; Idempotency-Key on POST /jobs.
+    Capabilities — stub until verified SPPS profile. No invented heatmaps.
 servers:
   - url: /
     description: relative to API host
@@ -180,9 +181,32 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobCreate"
       responses:
-        "501":
-          description: Not implemented yet
+        "201":
+          description: Job created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+        "200":
+          description: Idempotent replay of the same key+request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+        "400":
+          description: Missing Idempotency-Key
+        "404":
+          description: Revision not found
+        "409":
+          description: Idempotency reuse mismatch or snapshotHash mismatch
 
   /api/v1/jobs/{id}:
     parameters:
@@ -192,8 +216,14 @@ paths:
       summary: Job status
       operationId: getJob
       responses:
-        "501":
-          description: Not implemented yet
+        "200":
+          description: Job record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+        "404":
+          description: Not found
 
   /api/v1/jobs/{id}/events:
     parameters:
@@ -214,8 +244,14 @@ paths:
       summary: Cancel job
       operationId: cancelJob
       responses:
-        "501":
-          description: Not implemented yet
+        "200":
+          description: Cancel requested or already terminal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobResponse"
+        "404":
+          description: Not found
 
   /api/v1/results/{id}/manifest:
     parameters:
@@ -437,3 +473,48 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ValidationIssue"
+
+    JobCreate:
+      type: object
+      required: [revisionId]
+      properties:
+        revisionId: { type: string, format: uuid }
+        snapshotHash:
+          type: string
+          minLength: 64
+          maxLength: 64
+          nullable: true
+          description: Optional client check; must match revision when set
+
+    JobResponse:
+      type: object
+      required:
+        [
+          id,
+          projectId,
+          revisionId,
+          snapshotHash,
+          status,
+          cancelRequested,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        revisionId: { type: string, format: uuid }
+        snapshotHash: { type: string }
+        status:
+          type: string
+          enum: [created, queued, running, completed, failed, cancelled]
+        errorCode: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        resultManifest:
+          type: object
+          nullable: true
+          description: ResultManifest-shaped JSON; mapAvailable false until real samples
+        cancelRequested: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }

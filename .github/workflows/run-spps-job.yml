@@ -1,0 +1,176 @@
+# STG-04: real SPPS attempt on Linux CI without Docker Desktop on the owner machine.
+# Downloads pinned SPPS artifact (gh), runs adapter gates + fixture attempt, uploads report.
+#
+# Blocker: engine/fixtures/minimal_room/inputs still lacks config.xml / mesh binaries.
+# In that case the report records FIXTURE_INPUTS_MISSING (not a fake heatmap).
+
+name: Run SPPS Job
+
+"on":
+  workflow_dispatch:
+  push:
+    paths:
+      - "engine/adapter/**"
+      - "engine/fixtures/**"
+      - "engine/PINNED.json"
+      - ".github/workflows/run-spps-job.yml"
+
+concurrency:
+  group: run-spps-job-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  attempt-fixture:
+    name: Adapter + SPPS fixture attempt (ubuntu-22.04)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout SonoPlan
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read pin + prepare dirs
+        id: pin
+        run: |
+          mkdir -p ci-spps-job engine/binaries/spps-ci
+          python3 <<'PY'
+          import json, os
+          from pathlib import Path
+          pin = json.loads(Path("engine/PINNED.json").read_text(encoding="utf-8"))
+          art = pin.get("binary_artifact") or {}
+          commit = pin["isimpa"]["commit"]
+          short = commit[:12]
+          artifact = art.get("artifact_name") or f"spps-linux-x86_64-{short}"
+          run_id = art.get("github_run_id") or ""
+          checksum = pin.get("binary_checksum") or ""
+          out = Path(os.environ["GITHUB_OUTPUT"])
+          with out.open("a", encoding="utf-8") as fh:
+              fh.write(f"commit={commit}\n")
+              fh.write(f"short={short}\n")
+              fh.write(f"checksum={checksum}\n")
+              fh.write(f"artifact={artifact}\n")
+              fh.write(f"run_id={run_id}\n")
+          print(f"artifact={artifact} run_id={run_id}")
+          PY
+
+      - name: Download SPPS artifact (gh)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ steps.pin.outputs.run_id }}"
+          ART="${{ steps.pin.outputs.artifact }}"
+          DEST="engine/binaries/spps-ci"
+          if [[ -n "$RUN_ID" ]]; then
+            gh run download "$RUN_ID" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+          fi
+          if ! find "$DEST" -type f -name spps | grep -q .; then
+            echo "Pinned run download missed; trying latest successful Build SPPS run…"
+            LATEST=$(gh run list --repo "${{ github.repository }}" --workflow build-spps.yml --status success --limit 1 --json databaseId -q '.[0].databaseId' || true)
+            if [[ -n "$LATEST" && "$LATEST" != "null" ]]; then
+              gh run download "$LATEST" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+            fi
+          fi
+
+      - name: Locate SPPS binary
+        id: bin
+        run: |
+          set -euo pipefail
+          FOUND=$(find engine/binaries -type f -name spps 2>/dev/null | head -n1 || true)
+          if [[ -z "$FOUND" ]]; then
+            echo "found=0" >> "$GITHUB_OUTPUT"
+            echo "path=" >> "$GITHUB_OUTPUT"
+            echo "spps binary not found" | tee ci-spps-job/binary_missing.txt
+            exit 0
+          fi
+          chmod +x "$FOUND"
+          echo "found=1" >> "$GITHUB_OUTPUT"
+          echo "path=$FOUND" >> "$GITHUB_OUTPUT"
+          sha256sum "$FOUND" | tee ci-spps-job/sha256.txt
+
+      - name: Verify checksum when present
+        if: steps.bin.outputs.found == '1' && steps.pin.outputs.checksum != ''
+        run: |
+          set -euo pipefail
+          ACTUAL=$(sha256sum "${{ steps.bin.outputs.path }}" | awk '{print $1}')
+          EXPECTED="${{ steps.pin.outputs.checksum }}"
+          echo "actual=$ACTUAL expected=$EXPECTED"
+          test "$ACTUAL" = "$EXPECTED"
+
+      - name: Adapter unit tests (no binary required)
+        working-directory: engine/adapter
+        run: python -m unittest tests.test_validate_outputs -v
+
+      - name: ENG-009 broken_exit0 must fail validation
+        working-directory: engine/adapter
+        run: |
+          set +e
+          python -m sonoplan_adapter.cli validate-outputs ../fixtures/broken_exit0 \
+            --manifest ../fixtures/broken_exit0/manifest.json --exit-code 0 \
+            > ../../ci-spps-job/broken_exit0_report.json
+          CODE=$?
+          set -e
+          echo "broken_exit0_exit=$CODE" | tee ../../ci-spps-job/broken_exit0_exit.txt
+          test "$CODE" -ne 0
+
+      - name: check-env + attempt-run fixture
+        if: steps.bin.outputs.found == '1'
+        env:
+          SPPS_BIN: ${{ steps.bin.outputs.path }}
+        working-directory: engine/adapter
+        run: |
+          python -m sonoplan_adapter.cli check-env --spps-bin "$SPPS_BIN" \
+            | tee ../../ci-spps-job/check_env.json
+          set +e
+          python -m sonoplan_adapter.cli attempt-run ../fixtures/minimal_room/inputs \
+            --required-input config.xml \
+            --report ../../ci-spps-job/attempt_run.json
+          CODE=$?
+          set -e
+          echo "attempt_exit=$CODE" | tee ../../ci-spps-job/attempt_exit.txt
+          # 0 = real SPPS success; 2 = FIXTURE_INPUTS_MISSING (documented blocker)
+          if [[ "$CODE" -eq 0 || "$CODE" -eq 2 ]]; then
+            exit 0
+          fi
+          exit "$CODE"
+
+      - name: Record blocker when binary missing
+        if: steps.bin.outputs.found != '1'
+        run: |
+          cat > ci-spps-job/attempt_run.json <<'EOF'
+          {
+            "ok": false,
+            "error_code": "SPPS_BIN_MISSING",
+            "error_message": "Could not download SPPS artifact; re-run Build SPPS or check PINNED.json run_id."
+          }
+          EOF
+
+      - name: Upload job report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spps-job-report-${{ github.run_id }}
+          path: ci-spps-job/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Job summary
+        run: |
+          {
+            echo "## SPPS job attempt"
+            echo ""
+            echo "- Artifact pin: \`${{ steps.pin.outputs.artifact }}\`"
+            echo "- Binary found: \`${{ steps.bin.outputs.found }}\`"
+            echo "- Path: \`${{ steps.bin.outputs.path }}\`"
+            echo ""
+            echo "If attempt report shows \`FIXTURE_INPUTS_MISSING\`, fill"
+            echo "\`engine/fixtures/minimal_room/inputs\` (config.xml, mesh) — do not invent binaries."
+            echo "No heatmap / dB values are published by this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"

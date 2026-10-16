@@ -1,6 +1,6 @@
 # services/api
 
-FastAPI `/api/v1` — STG-02: проекты, draft с ETag, ревизии, validate.
+FastAPI `/api/v1` — STG-04: проекты, draft с ETag, ревизии, validate, calculation jobs.
 
 ## Реализовано
 
@@ -10,11 +10,19 @@ FastAPI `/api/v1` — STG-02: проекты, draft с ETag, ревизии, val
 - `GET/PATCH /api/v1/projects/{id}/draft` — ETag / If-Match (412 при mismatch, 428 без If-Match)
 - `POST /api/v1/projects/{id}/revisions` → `revisionId`, `snapshotHash`
 - `POST /api/v1/revisions/{id}/validate` → errors / warnings
+- `POST /api/v1/jobs` — заголовок `Idempotency-Key` обязателен; привязка к `revisionId` + `snapshotHash`
+- `GET /api/v1/jobs/{id}` — статус / манифест / код ошибки
+- `POST /api/v1/jobs/{id}/cancel`
+
+Состояния job: `created` → `queued` → `running` → `completed` | `failed` | `cancelled`.
+
+По умолчанию `SONOPLAN_JOBS_INLINE=1` (без RabbitMQ): исполнение в процессе API через `engine/adapter`.  
+На Windows ожидаем `failed` с `SPPS_NOT_LINUX` (или `SPPS_BIN_MISSING`). Фейковая теплокарта не публикуется.
 
 ## База данных
 
 - **Production / compose:** PostgreSQL через `DATABASE_URL` (`postgresql+psycopg://…`).
-- Миграции: Alembic (`alembic upgrade head`) из каталога `services/api`.
+- Миграции: Alembic (`alembic upgrade head`) из каталога `services/api` — таблицы `projects` / `drafts` / `revisions` / `jobs`.
 - **Pytest:** SQLite in-memory через fixture override — только для тестов, не prod-путь.
 
 ## Локальный запуск
@@ -39,4 +47,4 @@ OpenAPI UI: `http://127.0.0.1:8000/docs`
 pytest
 ```
 
-Не подключать SPPS из API напрямую — только через worker → adapter.
+Не подключать SPPS из API напрямую в обход adapter — расчёт идёт через `job_execution` → adapter.

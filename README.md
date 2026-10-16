@@ -53,8 +53,9 @@ Compose поднимает PostgreSQL, RabbitMQ и MinIO (S3-совместим�
 
 - **STG-01** — воспроизводимый путь SPPS (`engine/`)
 - **STG-02** — схема проекта, единицы, координаты, ревизии, минимальный API
-- **STG-03** — мобильный редактор цеха (план Konva, draft ETag, validate/revision); расчёт — stub до SPPS
-- **STG-04…** — очередь jobs / worker / реальный SPPS
+- **STG-03** — мобильный редактор цеха (план Konva, draft ETag, validate/revision)
+- **STG-04** — `POST/GET /jobs` + cancel, worker→adapter, CI `run-spps-job.yml`; экран «Расчёты» без теплокарты
+- Полный прогон ядра блокируется отсутствием fixture inputs (`config.xml` / mesh) — см. `CODE_MAP.md`
 
 Не выдавать интерполяцию/палитру за физический расчёт. Не подменять SPPS заранее нарисованной картой.
 

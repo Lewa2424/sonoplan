@@ -1,11 +1,11 @@
-"""SQLAlchemy ORM models for projects, drafts, revisions."""
+"""SQLAlchemy ORM models for projects, drafts, revisions, jobs."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -41,6 +41,10 @@ class ProjectRow(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    jobs: Mapped[list[JobRow]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
 
 
 class DraftRow(Base):
@@ -73,3 +77,36 @@ class RevisionRow(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     project: Mapped[ProjectRow] = relationship(back_populates="revisions")
+    jobs: Mapped[list[JobRow]] = relationship(back_populates="revision")
+
+
+class JobRow(Base):
+    """Calculation job bound to one immutable revision + snapshotHash."""
+
+    __tablename__ = "jobs"
+    __table_args__ = (UniqueConstraint("idempotency_key", name="uq_jobs_idempotency_key"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid_str)
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    revision_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("revisions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    # Frozen at create — must match revision.snapshot_hash (cache key independent of camera).
+    snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # created → queued → running → completed | failed | cancelled
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="created")
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    result_manifest: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    project: Mapped[ProjectRow] = relationship(back_populates="jobs")
+    revision: Mapped[RevisionRow] = relationship(back_populates="jobs")
