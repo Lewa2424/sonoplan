@@ -52,13 +52,9 @@ if [[ "${ACTUAL}" != "${COMMIT}" ]]; then
   exit 1
 fi
 
-# Optional SonoPlan patches (empty until ENG-009)
-if ls "${PATCH_DIR}"/*.patch 1>/dev/null 2>&1; then
-  echo "Applying patches from ${PATCH_DIR} ..."
-  git -C "${SRC}" apply --whitespace=nowarn "${PATCH_DIR}"/*.patch
-else
-  echo "No .patch files yet (ENG-009 pending)."
-fi
+# SonoPlan patches (punctual deposit-on-start-tetra; ENG-009 status later)
+echo "Applying SPPS patches via apply-spps-patches.py ..."
+python3 "${ENGINE_DIR}/scripts/apply-spps-patches.py" "${SRC}"
 
 mkdir -p "${SRC}/build" "${DIST_DIR}" "${CPM_SOURCE_CACHE}"
 cd "${SRC}/build"

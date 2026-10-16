@@ -1,0 +1,34 @@
+From: SonoPlan <sonoplan@local>
+Subject: [PATCH] spps: deposit punctual energy on start tetra (UTILISER)
+
+Upstream UTILISER FreeParticleTranslation navigates to the end tetra first,
+then deposits only if that tetra has linkedRecepteurP. Particles leaving the
+receiver-linked tetra in one timestep never deposit (CI: walls absorb, .recp
+energy stays 0). Deposit on the start tetra before navigation.
+
+Pinned: 929a5c8e5f590b189f29155faeff8670f3699479
+---
+--- a/src/spps/CalculationCore.cpp
++++ b/src/spps/CalculationCore.cpp
+@@ -1,5 +1,12 @@
+ void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &configurationP,const vec3 &translationVector)
+ {
++	// SonoPlan: deposit on start-tetra linked receivers before navigating away.
++	// Upstream UTILISER path only deposited on the *end* tetra; particles that
++	// leave a linked tetra in one timestep wrote zero punctual energy while
++	// still hitting walls (minimal_room CI).
++	if(configurationP.currentTetra && configurationP.currentTetra->linkedRecepteurP)
++		reportTool->ParticuleFreeTranslation(configurationP,configurationP.position+translationVector);
++
+ 	if(configurationP.currentTetra)
+ 	{
+ 		bool changeTetrahedra=true;
+@@ -21,8 +28,6 @@
+ 			}
+ 		}
+ 	}
+-	if(configurationP.currentTetra->linkedRecepteurP)
+-		reportTool->ParticuleFreeTranslation(configurationP,configurationP.position+translationVector);
+ 
+ 	//////////////
+ 	// Translation de la particule

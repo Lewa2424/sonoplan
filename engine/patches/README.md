@@ -1,30 +1,27 @@
-# Патчи ядра (ENG-009, правило 60-engine-spps)
+# Патчи ядра (правило 60-engine-spps)
 
 ## Политика
 
 - Минимальный diff; каждый `.patch` с записью: причина, до/после на fixtures, численное влияние.
 - Не менять эталоны ради зелёных тестов.
 - Сохранять лицензионные уведомления upstream.
+- Применение: `engine/scripts/apply-spps-patches.py` из `build-spps-native.sh` (`git apply` + string fallback).
 
-## Планируемый патч: код возврата SPPS
+## `0001-spps-deposit-on-start-tetra.patch`
 
-**Факт (pinned commit `929a5c8e…`, файл `src/spps/sppsNantes.cpp`):**
+**Pinned commit:** `929a5c8e5f590b189f29155faeff8670f3699479`  
+**Файл:** `src/spps/CalculationCore.cpp` — `FreeParticleTranslation` (ветка `UTILISER_MAILLAGE_OPTIMISATION`).
 
-```cpp
-int main(int argc, char* argv[])
-{
-    MainProcess(argc,argv);
-    // ...
-    return 0;
-}
-```
+**Симптом (CI minimal_room):** SPPS exit 0, частицы поглощаются материалами (~20k), все punctual `.recp` с `energy_sum=0`.
 
-`MainProcess` не влияет на код выхода — процесс часто завершается с `0` даже при сбое. Это подтверждает ENG-009 / S05.
+**Причина:** upstream сначала навигирует в *конечный* тетраэдр шага, затем вызывает `ParticuleFreeTranslation` только если у *конечного* тетраэдра есть `linkedRecepteurP`. Частица, покидающая linked-тетраэдр за один timestep, не депозитит энергию.
 
-**Намерение патча (ещё не применён — нет локальной сборки):**
+**Исправление:** депозит по linked receivers *стартового* тетраэдра до навигации (как в ветке без UTILISER). Навигация `currentTetra` сохраняется.
 
-1. Пробросить статус `MainProcess` в `return` из `main`.
-2. Сохранить обёртку адаптера: даже после патча проверять наличие/размер/целостность выходов.
-3. Регрессия: `fixtures/broken_exit0` + unit-тест `test_validate_outputs.py`.
+**Влияние:** ненулевая энергия / конечный `lpDb` на punctual receivers при том же fixture; численные значения — честный SPPS, не подделка дБ.
 
-Файл патча появится как `0001-spps-propagate-mainprocess-status.patch` после `git format-patch` на клоне в `.cache/isimpa`.
+## Планируемый патч: код возврата SPPS (ENG-009)
+
+**Факт:** `main` в `sppsNantes.cpp` всегда `return 0` после `MainProcess` — процесс может завершиться с 0 при сбое.
+
+**Намерение (ещё не в tree как рабочий патч):** проброс статуса `MainProcess` + регрессия `fixtures/broken_exit0`.

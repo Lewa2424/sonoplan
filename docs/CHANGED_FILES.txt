@@ -153,3 +153,6 @@ engine/fixtures/minimal_room/expected/ORIGIN.txt
 engine/fixtures/minimal_room/expected/Punctual receivers/r_front/Sound level.recp
 engine/fixtures/minimal_room/expected/statsSPPS.gabe
 engine/fixtures/minimal_room/expected/README.md
+engine/patches/0001-spps-deposit-on-start-tetra.patch
+engine/patches/README.md
+engine/scripts/apply-spps-patches.py
