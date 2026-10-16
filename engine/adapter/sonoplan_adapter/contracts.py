@@ -72,10 +72,10 @@ class SppsRunResult:
 # from I-Simpa BaseReportManager::SauveRecepteursPonctuels). Binary formats TBD decode.
 DEFAULT_OUTPUT_SPECS: tuple[OutputFileSpec, ...] = (
     OutputFileSpec(
-        relative_path="Punctual receivers/r_front/Sound level.recp",
+        relative_path="Punctual receivers/r_near/Sound level.recp",
         required=True,
         min_bytes=1,
-        description="Punctual receiver sound level for r_front (binary .recp, not CSV)",
+        description="Punctual receiver sound level for r_near (binary .recp, not CSV)",
     ),
     OutputFileSpec(
         relative_path="statsSPPS.gabe",

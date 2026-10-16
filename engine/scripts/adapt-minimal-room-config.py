@@ -63,8 +63,11 @@ SOURCE_TYPE_OMNI = 0
 # Source + punctual receivers inside official cube bbox [0,5]³
 # (same cluster as upstream src/spps/tests/config.xml).
 SOURCE_POS = (2.0, 2.0, 2.0)
+# Keep upstream-like ring at 1 m, plus r_near on the source tetra
+# (slightly offset so CheckSourcePosition / vertex nudge still OK).
 RECEIVERS = [
     # id, name, x, y, z, u, v, w
+    (3001, "r_near", 2.1, 2.0, 2.0, -1.0, 0.0, 0.0),
     (3431, "r_top", 2.0, 2.0, 3.0, 0.0, 0.0, -1.0),
     (3911, "r_right", 2.0, 1.0, 2.0, 0.0, 1.0, 0.0),
     (3751, "r_left", 2.0, 3.0, 2.0, 0.0, -1.0, 0.0),
@@ -211,8 +214,9 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     atm.set("temperature", _f(20.0))
 
     mats = ET.SubElement(root, "surface_absorption_enum")
-    # Cube faces use idMat=0 only.
-    for mat_id, absorb in ((0, 0.20),):
+    # Cube faces use idMat=0 only. Low absorb so particles live long enough
+    # for punctual hits on the smoke path.
+    for mat_id, absorb in ((0, 0.05),):
         ts = ET.SubElement(mats, "type_surface")
         ts.set("id", str(mat_id))
         ts.set("resistivite", _f(100.0))

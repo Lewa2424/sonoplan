@@ -21,8 +21,14 @@
   ],
   "expected_outputs": [
     {
-      "path": "Punctual receivers/r_front/Sound level.recp",
+      "path": "Punctual receivers/r_near/Sound level.recp",
       "required": true,
+      "min_bytes": 1,
+      "description": "Punctual receiver levels for r_near (binary .recp)"
+    },
+    {
+      "path": "Punctual receivers/r_front/Sound level.recp",
+      "required": false,
       "min_bytes": 1,
       "description": "Punctual receiver levels for r_front (binary .recp)"
     },

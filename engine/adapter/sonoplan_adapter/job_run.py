@@ -94,6 +94,7 @@ def attempt_spps_calculation(
             work_dir=str(work),
             config_xml_name=config_xml_name,
             spps_executable=env.spps_bin or "spps",
+            verbose=True,
         )
     )
     stdout_tail = _tail(result.stdout or "")

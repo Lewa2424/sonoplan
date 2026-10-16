@@ -34,33 +34,33 @@
 <condition_atmospherique absatmo="0" disable_absatmo_computation="0" humidite="50" pression="101325" alog="0" blin="0" lst_soltype="1" z0="0.020000" temperature="20" />
 <surface_absorption_enum>
     <type_surface id="0" resistivite="100" side_material="1">
-      <bfreq freq="20000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="16000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="12500" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="10000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="8000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="6300" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="5000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="4000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="3150" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="2500" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="2000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="1600" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="1250" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="1000" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="800" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="630" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="500" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="400" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="315" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="250" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="200" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="160" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="125" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="100" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="80" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="63" absorb="0.200000" diffusion="0" loi="0" />
-    <bfreq freq="50" absorb="0.200000" diffusion="0" loi="0" />
+      <bfreq freq="20000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="16000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="12500" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="10000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="8000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="6300" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="5000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="4000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="3150" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="2500" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="2000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="1600" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="1250" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="1000" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="800" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="630" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="500" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="400" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="315" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="250" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="200" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="160" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="125" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="100" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="80" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="63" absorb="0.050000" diffusion="0" loi="0" />
+    <bfreq freq="50" absorb="0.050000" diffusion="0" loi="0" />
     </type_surface>
   </surface_absorption_enum>
 <subdomains />
@@ -96,7 +96,36 @@
     </source>
   </sources>
 <recepteursp>
-    <recepteur_ponctuel id="3431" name="r_top" lbl="r_top" x="2" y="2" z="3" u="0" v="0" w="-1">
+    <recepteur_ponctuel id="3001" name="r_near" lbl="r_near" x="2.100000" y="2" z="2" u="-1" v="0" w="0">
+      <bfreq freq="20000" db="-6.859580" />
+    <bfreq freq="16000" db="-7.859580" />
+    <bfreq freq="12500" db="-8.859579" />
+    <bfreq freq="10000" db="-9.859579" />
+    <bfreq freq="8000" db="-10.859579" />
+    <bfreq freq="6300" db="-11.859579" />
+    <bfreq freq="5000" db="-12.859579" />
+    <bfreq freq="4000" db="-13.859579" />
+    <bfreq freq="3150" db="-14.859579" />
+    <bfreq freq="2500" db="-15.859579" />
+    <bfreq freq="2000" db="-16.859579" />
+    <bfreq freq="1600" db="-17.859579" />
+    <bfreq freq="1250" db="-18.859579" />
+    <bfreq freq="1000" db="-19.859579" />
+    <bfreq freq="800" db="-20.859579" />
+    <bfreq freq="630" db="-21.859579" />
+    <bfreq freq="500" db="-22.859579" />
+    <bfreq freq="400" db="-23.859579" />
+    <bfreq freq="315" db="-24.859579" />
+    <bfreq freq="250" db="-25.859579" />
+    <bfreq freq="200" db="-26.859579" />
+    <bfreq freq="160" db="-27.859579" />
+    <bfreq freq="125" db="-28.859579" />
+    <bfreq freq="100" db="-29.859579" />
+    <bfreq freq="80" db="-30.859579" />
+    <bfreq freq="63" db="-31.859579" />
+    <bfreq freq="50" db="-32.859581" />
+    </recepteur_ponctuel>
+  <recepteur_ponctuel id="3431" name="r_top" lbl="r_top" x="2" y="2" z="3" u="0" v="0" w="-1">
       <bfreq freq="20000" db="-6.859580" />
     <bfreq freq="16000" db="-7.859580" />
     <bfreq freq="12500" db="-8.859579" />
