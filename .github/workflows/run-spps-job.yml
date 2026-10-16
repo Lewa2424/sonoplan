@@ -254,7 +254,7 @@ jobs:
             echo "- Artifact pin: \`${{ steps.pin.outputs.artifact }}\`"
             echo "- Binary found: \`${{ steps.bin.outputs.found }}\`"
             echo "- Path: \`${{ steps.bin.outputs.path }}\`"
-            echo "- Fixture: \`engine/fixtures/minimal_room\` (official I-Simpa python_bindings mesh)"
+            echo "- Fixture: \`engine/fixtures/minimal_room\` (official I-Simpa cube 5x5x5 mesh)"
             echo ""
             echo "Success requires real SPPS outputs + \`validate-outputs\`."
             echo "No heatmap / invented dB values are published by this workflow."

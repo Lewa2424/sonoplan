@@ -2,11 +2,11 @@
 # Prepare engine/fixtures/minimal_room/inputs from pinned I-Simpa test data.
 #
 # Copies official binaries (does NOT invent mesh):
-#   src/python_bindings/tests/mesh.cbin
-#   src/python_bindings/tests/tetramesh.mbin
+#   src/lib_interface/tests/cube.cbin       → mesh.cbin (5×5×5 m)
+#   src/lib_interface/tests/cube_mesh.mbin  → tetramesh.mbin
 #   src/spps/tests/speaker-test3.txt
-# Generates config.xml via adapt-minimal-room-config.py (materials 100/101,
-# workingdirectory=., dots locale, reduced particle count for CI smoke).
+# Generates config.xml via adapt-minimal-room-config.py (material id 0,
+# workingdirectory=., dots locale, CI smoke particle count).
 #
 # Usage (from repo root):
 #   ./engine/scripts/prepare-minimal-room-fixture.sh
@@ -38,8 +38,8 @@ if [[ "${ACTUAL}" != "${COMMIT}" ]]; then
   exit 1
 fi
 
-MESH_SRC="${SRC}/src/python_bindings/tests/mesh.cbin"
-TETRA_SRC="${SRC}/src/python_bindings/tests/tetramesh.mbin"
+MESH_SRC="${SRC}/src/lib_interface/tests/cube.cbin"
+TETRA_SRC="${SRC}/src/lib_interface/tests/cube_mesh.mbin"
 SPEAKER_SRC="${SRC}/src/spps/tests/speaker-test3.txt"
 
 for f in "${MESH_SRC}" "${TETRA_SRC}" "${SPEAKER_SRC}"; do
@@ -67,18 +67,19 @@ I-Simpa repository: ${REPO}
 Pinned commit: ${COMMIT}
 
 Copied unchanged (official upstream test binaries / data):
-  mesh.cbin          <- src/python_bindings/tests/mesh.cbin
-  tetramesh.mbin     <- src/python_bindings/tests/tetramesh.mbin
+  mesh.cbin          <- src/lib_interface/tests/cube.cbin (5x5x5 m, idMat=0)
+  tetramesh.mbin     <- src/lib_interface/tests/cube_mesh.mbin
   speaker-test3.txt  <- src/spps/tests/speaker-test3.txt
 
 Generated (structure from src/spps/tests/config.xml, adapted for this mesh):
   config.xml
     - workingdirectory=./  (trailing slash required: SPPS concatenates workingDir+file)
     - modelName=mesh.cbin / tetrameshFileName=tetramesh.mbin
-    - surface materials ids 100 and 101 (face idMat in mesh.cbin)
+    - surface material id 0 (face idMat in cube.cbin)
     - no surface receivers (mesh idRs=-1)
-    - decimal separator: dot (ENG-007)
+    - decimal separator: dot (ENG-007); runner forces LC_NUMERIC=C
     - nbparticules=${NB_PARTICLES}, random_seed=${SEED}
+    - directivite=0, rayon_recepteurp=1, duree_simulation=1, pasdetemps=5e-4
     - calc bands: 100 Hz and 1000 Hz only (CI smoke)
 
 License: I-Simpa is GPLv3; redistributed test inputs retain upstream copyright.

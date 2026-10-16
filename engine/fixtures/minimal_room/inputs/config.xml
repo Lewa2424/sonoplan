@@ -33,7 +33,7 @@
   </simulation>
 <condition_atmospherique absatmo="0" disable_absatmo_computation="0" humidite="50" pression="101325" alog="0" blin="0" lst_soltype="1" z0="0.020000" temperature="20" />
 <surface_absorption_enum>
-    <type_surface id="100" resistivite="100" side_material="1">
+    <type_surface id="0" resistivite="100" side_material="1">
       <bfreq freq="20000" absorb="0.200000" diffusion="0" loi="0" />
     <bfreq freq="16000" absorb="0.200000" diffusion="0" loi="0" />
     <bfreq freq="12500" absorb="0.200000" diffusion="0" loi="0" />
@@ -61,35 +61,6 @@
     <bfreq freq="80" absorb="0.200000" diffusion="0" loi="0" />
     <bfreq freq="63" absorb="0.200000" diffusion="0" loi="0" />
     <bfreq freq="50" absorb="0.200000" diffusion="0" loi="0" />
-    </type_surface>
-  <type_surface id="101" resistivite="100" side_material="1">
-      <bfreq freq="20000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="16000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="12500" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="10000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="8000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="6300" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="5000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="4000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="3150" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="2500" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="2000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="1600" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="1250" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="1000" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="800" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="630" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="500" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="400" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="315" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="250" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="200" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="160" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="125" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="100" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="80" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="63" absorb="0.400000" diffusion="0" loi="0" />
-    <bfreq freq="50" absorb="0.400000" diffusion="0" loi="0" />
     </type_surface>
   </surface_absorption_enum>
 <subdomains />

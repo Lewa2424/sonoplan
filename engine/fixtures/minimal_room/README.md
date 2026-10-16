@@ -1,25 +1,27 @@
 # Fixture: minimal_room
 
-Статус: **inputs_ready** — официальные `mesh.cbin` / `tetramesh.mbin` из pinned I-Simpa + адаптированный `config.xml`.
+Статус: **inputs_ready** — официальный куб I-Simpa `cube.cbin` / `cube_mesh.mbin` + адаптированный `config.xml`.
 
 ## Происхождение входов
 
 | Файл | Источник (commit `929a5c8e…`) |
 |------|-------------------------------|
-| `inputs/mesh.cbin` | `src/python_bindings/tests/mesh.cbin` (без изменений) |
-| `inputs/tetramesh.mbin` | `src/python_bindings/tests/tetramesh.mbin` (без изменений) |
-| `inputs/speaker-test3.txt` | `src/spps/tests/speaker-test3.txt` (без изменений) |
-| `inputs/config.xml` | Структура `src/spps/tests/config.xml`, адаптирована под этот mesh |
+| `inputs/mesh.cbin` | `src/lib_interface/tests/cube.cbin` (5×5×5 m, idMat=0) |
+| `inputs/tetramesh.mbin` | `src/lib_interface/tests/cube_mesh.mbin` |
+| `inputs/speaker-test3.txt` | `src/spps/tests/speaker-test3.txt` |
+| `inputs/config.xml` | Структура `src/spps/tests/config.xml`, адаптирована под куб |
 
-Адаптация config (не выдуманный mesh):
+Адаптация config:
 
-- материалы `id=100` и `id=101` (face `idMat` в официальном mesh);
-- без поверхностных приёмников (`idRs=-1` в mesh);
-- `workingdirectory=.`, десятичный разделитель — точка (ENG-007);
+- материал `id=0` (face `idMat` в `cube.cbin`);
+- без поверхностных приёмников (`idRs=-1`);
+- `workingdirectory=./`, десятичный разделитель — точка (ENG-007);
 - `random_seed=1` (≠0: SetRandSeed + single-thread), `nbparticules=20000`;
 - `directivite=0` (omni), `rayon_recepteurp=2`, `duree_simulation=1`, `pasdetemps=5e-4`;
-- runner принудительно `LC_ALL=C` / `LC_NUMERIC=C` (atof и десятичная точка);
+- runner принудительно `LC_ALL=C` / `LC_NUMERIC=C`;
 - расчётные полосы: 100 Hz и 1000 Hz.
+
+**Не** использовать `python_bindings/tests/mesh.cbin` (20×30×10) с этим кластером приёмников — в CI энергия punctual оставалась 0 при ненулевых ударах о стены.
 
 Лицензия upstream: GPLv3 — см. `inputs/ORIGIN.txt` и `docs/engine-licenses.md`.
 

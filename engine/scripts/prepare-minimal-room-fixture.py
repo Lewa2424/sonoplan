@@ -20,9 +20,12 @@ ENGINE_DIR = SCRIPT_DIR.parent
 PIN_FILE = ENGINE_DIR / "PINNED.json"
 OUT_DIR = ENGINE_DIR / "fixtures" / "minimal_room" / "inputs"
 
+# Official 5×5×5 m cube matching src/spps/tests/config.xml source/receiver
+# positions (~2,2,2). NOT the python_bindings 20×30×10 mesh (wrong scale for
+# that config → particles hit walls but punctual energy stayed zero in CI).
 UPSTREAM_FILES = {
-    "mesh.cbin": "src/python_bindings/tests/mesh.cbin",
-    "tetramesh.mbin": "src/python_bindings/tests/tetramesh.mbin",
+    "mesh.cbin": "src/lib_interface/tests/cube.cbin",
+    "tetramesh.mbin": "src/lib_interface/tests/cube_mesh.mbin",
     "speaker-test3.txt": "src/spps/tests/speaker-test3.txt",
 }
 
@@ -70,20 +73,20 @@ I-Simpa repository: {repo}
 Pinned commit: {commit}
 
 Copied unchanged (official upstream test binaries / data):
-  mesh.cbin          <- src/python_bindings/tests/mesh.cbin
-  tetramesh.mbin     <- src/python_bindings/tests/tetramesh.mbin
+  mesh.cbin          <- src/lib_interface/tests/cube.cbin (5x5x5 m, idMat=0)
+  tetramesh.mbin     <- src/lib_interface/tests/cube_mesh.mbin
   speaker-test3.txt  <- src/spps/tests/speaker-test3.txt
 
 Generated (structure from src/spps/tests/config.xml, adapted for this mesh):
   config.xml
     - workingdirectory=./  (trailing slash required: SPPS concatenates workingDir+file)
     - modelName=mesh.cbin / tetrameshFileName=tetramesh.mbin
-    - surface materials ids 100 and 101 (face idMat in mesh.cbin)
+    - surface material id 0 (face idMat in cube.cbin)
     - no surface receivers (mesh idRs=-1)
-    - decimal separator: dot (ENG-007)
+    - decimal separator: dot (ENG-007); runner forces LC_NUMERIC=C
     - nbparticules=20000, random_seed=1 (seed!=0 required for SetRandSeed)
     - directivite=0 (omnidirectional; speaker-test3.txt kept for provenance)
-    - rayon_recepteurp=2, duree_simulation=1, pasdetemps=5e-4
+    - rayon_recepteurp=1, duree_simulation=1, pasdetemps=5e-4
     - calc bands: 100 Hz and 1000 Hz only (CI smoke)
 
 License: I-Simpa is GPLv3; redistributed test inputs retain upstream copyright.

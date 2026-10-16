@@ -2,18 +2,17 @@
 """Adapt upstream I-Simpa SPPS test config for SonoPlan minimal_room fixture.
 
 Source: src/spps/tests/config.xml at the pinned I-Simpa commit.
-Mesh:   src/python_bindings/tests/mesh.cbin + tetramesh.mbin (20x30x10 m,
-        material ids 100/101, no surface receivers).
+Mesh:   src/lib_interface/tests/cube.cbin + cube_mesh.mbin (5×5×5 m,
+        material id 0, no surface receivers).
 
 Does not invent acoustic dB values. Numeric locale: dots (ENG-007).
 
-Zero-energy root causes addressed here (CI run 38870337557):
-- random_seed=0 does NOT call SetRandSeed and keeps multithread on
-  (sppsNantes.cpp); use seed!=0 for single-thread reproducible smoke.
-- SOURCE_TYPE_DIRECTION (directivite=5) + balloon is unnecessary for
-  energy smoke; omnidirectional (0) guarantees isotropic emission.
-- Upstream punctual cluster at (2,2,2) is valid inside this mesh, but a
-  larger receiver radius improves hit probability in a coarse tet mesh.
+Zero-energy root causes (CI runs 38870337557 / 38874343042):
+- Wrong mesh: python_bindings 20×30×10 was paired with the spps/tests
+  punctual cluster at ~(2,2,2). Particles hit walls but punctual energy
+  stayed 0. Official cube (5×5×5, idMat=0) matches those positions.
+- random_seed=0 skips SetRandSeed / keeps multithread — use seed!=0.
+- Prefer omnidirectional source for smoke (directivite=0).
 """
 
 from __future__ import annotations
@@ -55,16 +54,14 @@ FREQS = [
     50,
 ]
 
-# Match face idMat in python_bindings/tests/mesh.cbin at pinned commit.
-MATERIAL_IDS = (100, 101)
+# Match face idMat in lib_interface/tests/cube.cbin at pinned commit.
+MATERIAL_IDS = (0,)
 
 # SOURCE_TYPE_OMNIDIRECTION in I-Simpa coreTypes.h
 SOURCE_TYPE_OMNI = 0
 
-# Source + punctual receivers inside official mesh bbox [0,20]x[0,30]x[0,10]
-# and confirmed inside tetramesh.mbin volumes (point-in-tetra).
-# Cluster kept near (2,2,2) like upstream spps/tests/config.xml so the
-# scene stays a real closed-room SPPS case (not invented geometry).
+# Source + punctual receivers inside official cube bbox [0,5]³
+# (same cluster as upstream src/spps/tests/config.xml).
 SOURCE_POS = (2.0, 2.0, 2.0)
 RECEIVERS = [
     # id, name, x, y, z, u, v, w
@@ -183,7 +180,7 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     sim.set("pasdetemps", "5e-4")
     # Integer metres — never parsed as 0 by locale-sensitive atof.
     # Must be > source↔receiver distance (SPPS uses strict < rayon).
-    # Cluster is at 1 m from source → use 2 m.
+    # Cluster is at 1 m from source → rayon=2 so source starts inside spheres.
     sim.set("rayon_recepteurp", "2")
     sim.set("trans_epsilon", "5")
     sim.set("intensity_filename", "Intensity vector.rpi")
@@ -214,8 +211,8 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     atm.set("temperature", _f(20.0))
 
     mats = ET.SubElement(root, "surface_absorption_enum")
-    # 100: moderate absorption; 101: higher — both present on official mesh faces.
-    for mat_id, absorb in ((100, 0.20), (101, 0.40)):
+    # Cube faces use idMat=0 only.
+    for mat_id, absorb in ((0, 0.20),):
         ts = ET.SubElement(mats, "type_surface")
         ts.set("id", str(mat_id))
         ts.set("resistivite", _f(100.0))

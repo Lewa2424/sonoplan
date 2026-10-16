@@ -1,17 +1,17 @@
 {
   "id": "minimal_room",
   "status": "inputs_ready",
-  "description": "Minimal closed room fixture for STG-01. Mesh/tetramesh from official I-Simpa python_bindings tests at pinned commit; config adapted for that mesh.",
+  "description": "Minimal closed room fixture for STG-01. Official I-Simpa 5x5x5 cube mesh + adapted spps/tests config (punctual cluster at ~2,2,2).",
   "isimpa_commit": "929a5c8e5f590b189f29155faeff8670f3699479",
   "upstream_reference": {
-    "mesh": "src/python_bindings/tests/mesh.cbin",
-    "tetramesh": "src/python_bindings/tests/tetramesh.mbin",
+    "mesh": "src/lib_interface/tests/cube.cbin",
+    "tetramesh": "src/lib_interface/tests/cube_mesh.mbin",
     "directivity": "src/spps/tests/speaker-test3.txt",
-    "config_structure": "src/spps/tests/config.xml (adapted: materials 100/101, no surface receivers, dots locale)"
+    "config_structure": "src/spps/tests/config.xml (adapted: material 0, omni, dots locale, seed!=0)"
   },
   "room": {
-    "bbox_m": [[0.0, 0.0, 0.0], [20.0, 30.0, 10.0]],
-    "note": "Bounding box of official python_bindings/tests/mesh.cbin (not invented)"
+    "bbox_m": [[0.0, 0.0, 0.0], [5.0, 5.0, 5.0]],
+    "note": "Bounding box of official lib_interface/tests/cube.cbin (not invented)"
   },
   "required_inputs": [
     "config.xml",
