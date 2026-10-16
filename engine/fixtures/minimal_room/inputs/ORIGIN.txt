@@ -1,0 +1,22 @@
+SonoPlan minimal_room SPPS inputs
+=================================
+I-Simpa repository: https://github.com/Universite-Gustave-Eiffel/I-Simpa.git
+Pinned commit: 929a5c8e5f590b189f29155faeff8670f3699479
+
+Copied unchanged (official upstream test binaries / data):
+  mesh.cbin          <- src/python_bindings/tests/mesh.cbin
+  tetramesh.mbin     <- src/python_bindings/tests/tetramesh.mbin
+  speaker-test3.txt  <- src/spps/tests/speaker-test3.txt
+
+Generated (structure from src/spps/tests/config.xml, adapted for this mesh):
+  config.xml
+    - workingdirectory=.
+    - modelName=mesh.cbin / tetrameshFileName=tetramesh.mbin
+    - surface materials ids 100 and 101 (face idMat in mesh.cbin)
+    - no surface receivers (mesh idRs=-1)
+    - decimal separator: dot (ENG-007)
+    - nbparticules=10000, random_seed=0
+    - calc bands: 100 Hz and 1000 Hz only (CI smoke)
+
+License: I-Simpa is GPLv3; redistributed test inputs retain upstream copyright.
+See docs/engine-licenses.md.

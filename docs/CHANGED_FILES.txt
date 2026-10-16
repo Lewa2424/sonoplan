@@ -134,3 +134,15 @@ apps/web/src/model/contourHelpers.test.ts
 apps/web/src/model/contourHelpers.ts
 apps/web/src/model/factoryModel.ts
 apps/web/src/store/editorStore.ts
+engine/fixtures/minimal_room/README.md
+engine/fixtures/minimal_room/manifest.json
+engine/fixtures/minimal_room/inputs/README.md
+engine/fixtures/minimal_room/inputs/ORIGIN.txt
+engine/fixtures/minimal_room/inputs/SHA256SUMS
+engine/fixtures/minimal_room/inputs/config.xml
+engine/fixtures/minimal_room/inputs/mesh.cbin
+engine/fixtures/minimal_room/inputs/tetramesh.mbin
+engine/fixtures/minimal_room/inputs/speaker-test3.txt
+engine/scripts/adapt-minimal-room-config.py
+engine/scripts/prepare-minimal-room-fixture.py
+engine/scripts/prepare-minimal-room-fixture.sh

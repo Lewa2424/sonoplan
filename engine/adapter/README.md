@@ -22,11 +22,16 @@ Worker на Linux/VPS должен выставлять `SPPS_BIN` (или аб�
 ```powershell
 cd engine\adapter
 python -m sonoplan_adapter.cli check-env
-python -m sonoplan_adapter.cli attempt-run ..\fixtures\minimal_room\inputs --report ..\..\ci-spps-job\attempt.json
+python -m sonoplan_adapter.cli attempt-run ..\fixtures\minimal_room\inputs `
+  --required-input config.xml `
+  --required-input mesh.cbin `
+  --required-input tetramesh.mbin `
+  --required-input speaker-test3.txt `
+  --report ..\..\ci-spps-job\attempt.json
 ```
 
 Коды отказа: `SPPS_NOT_LINUX`, `SPPS_BIN_MISSING`, `FIXTURE_INPUTS_MISSING`, `SPPS_RUN_FAILED`.  
-`attempt-run` exit `2` = fixture inputs missing (блокер, не фейковый success).
+`attempt-run` exit `2` = fixture inputs missing. Inputs заполняются скриптом `engine/scripts/prepare-minimal-room-fixture.*` из официальных тестов I-Simpa (не выдуманный mesh).
 
 ## Unit-тесты без бинарника
 

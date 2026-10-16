@@ -1,24 +1,30 @@
 {
   "id": "minimal_room",
-  "status": "scaffold",
-  "description": "Minimal closed room fixture for STG-01. Binary mesh/tetramesh and golden outputs are filled after first successful SPPS run — not invented.",
+  "status": "inputs_ready",
+  "description": "Minimal closed room fixture for STG-01. Mesh/tetramesh from official I-Simpa python_bindings tests at pinned commit; config adapted for that mesh.",
   "isimpa_commit": "929a5c8e5f590b189f29155faeff8670f3699479",
-  "upstream_reference": "I-Simpa src/spps/tests/config.xml (structure only; not claimed runnable without mesh)",
+  "upstream_reference": {
+    "mesh": "src/python_bindings/tests/mesh.cbin",
+    "tetramesh": "src/python_bindings/tests/tetramesh.mbin",
+    "directivity": "src/spps/tests/speaker-test3.txt",
+    "config_structure": "src/spps/tests/config.xml (adapted: materials 100/101, no surface receivers, dots locale)"
+  },
   "room": {
-    "size_m": [4.0, 3.0, 2.5],
-    "note": "Conceptual box; physical surfaces produced by adapter after STG-01 build succeeds"
+    "bbox_m": [[0.0, 0.0, 0.0], [20.0, 30.0, 10.0]],
+    "note": "Bounding box of official python_bindings/tests/mesh.cbin (not invented)"
   },
   "required_inputs": [
     "config.xml",
     "mesh.cbin",
-    "tetramesh.mbin"
+    "tetramesh.mbin",
+    "speaker-test3.txt"
   ],
   "expected_outputs": [
     {
-      "path": "Punctual receivers/Sound level.recp",
+      "path": "Punctual receivers/r_front/Sound level.recp",
       "required": true,
       "min_bytes": 1,
-      "description": "Punctual receiver levels (binary)"
+      "description": "Punctual receiver levels for r_front (binary .recp)"
     },
     {
       "path": "statsSPPS.gabe",
@@ -28,7 +34,8 @@
     }
   ],
   "golden_values": null,
-  "golden_values_note": "SCI-003: compare with I-Simpa GUI/CLI on identical inputs after first run; tolerance 0.1 dB for identical binary postprocess.",
+  "golden_values_note": "SCI-003: compare decoded Lp with I-Simpa on identical inputs after first successful run; tolerance 0.1 dB for identical binary postprocess. Do not publish invented dB.",
   "seed": 0,
-  "multithreading_for_repro": false
+  "multithreading_for_repro": false,
+  "prepare_script": "engine/scripts/prepare-minimal-room-fixture.sh"
 }

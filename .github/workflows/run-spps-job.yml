@@ -1,8 +1,8 @@
-# STG-04: real SPPS attempt on Linux CI without Docker Desktop on the owner machine.
+# STG-01/04: real SPPS attempt on Linux CI without Docker Desktop on the owner machine.
 # Downloads pinned SPPS artifact (gh), runs adapter gates + fixture attempt, uploads report.
 #
-# Blocker: engine/fixtures/minimal_room/inputs still lacks config.xml / mesh binaries.
-# In that case the report records FIXTURE_INPUTS_MISSING (not a fake heatmap).
+# Requires engine/fixtures/minimal_room/inputs (config.xml + official mesh/tetramesh).
+# Success = SPPS exit + validate_outputs OK. No invented heatmap / dB values.
 
 name: Run SPPS Job
 
@@ -13,6 +13,8 @@ name: Run SPPS Job
       - "engine/adapter/**"
       - "engine/fixtures/**"
       - "engine/PINNED.json"
+      - "engine/scripts/prepare-minimal-room-fixture.*"
+      - "engine/scripts/adapt-minimal-room-config.py"
       - ".github/workflows/run-spps-job.yml"
 
 concurrency:
@@ -60,6 +62,16 @@ jobs:
               fh.write(f"run_id={run_id}\n")
           print(f"artifact={artifact} run_id={run_id}")
           PY
+
+      - name: Verify fixture inputs present
+        run: |
+          set -euo pipefail
+          IN="engine/fixtures/minimal_room/inputs"
+          for f in config.xml mesh.cbin tetramesh.mbin speaker-test3.txt ORIGIN.txt; do
+            test -f "$IN/$f" || { echo "MISSING $IN/$f"; exit 1; }
+          done
+          ls -la "$IN"
+          cat "$IN/ORIGIN.txt"
 
       - name: Download SPPS artifact (gh)
         env:
@@ -121,28 +133,7 @@ jobs:
           echo "broken_exit0_exit=$CODE" | tee ../../ci-spps-job/broken_exit0_exit.txt
           test "$CODE" -ne 0
 
-      - name: check-env + attempt-run fixture
-        if: steps.bin.outputs.found == '1'
-        env:
-          SPPS_BIN: ${{ steps.bin.outputs.path }}
-        working-directory: engine/adapter
-        run: |
-          python -m sonoplan_adapter.cli check-env --spps-bin "$SPPS_BIN" \
-            | tee ../../ci-spps-job/check_env.json
-          set +e
-          python -m sonoplan_adapter.cli attempt-run ../fixtures/minimal_room/inputs \
-            --required-input config.xml \
-            --report ../../ci-spps-job/attempt_run.json
-          CODE=$?
-          set -e
-          echo "attempt_exit=$CODE" | tee ../../ci-spps-job/attempt_exit.txt
-          # 0 = real SPPS success; 2 = FIXTURE_INPUTS_MISSING (documented blocker)
-          if [[ "$CODE" -eq 0 || "$CODE" -eq 2 ]]; then
-            exit 0
-          fi
-          exit "$CODE"
-
-      - name: Record blocker when binary missing
+      - name: Fail clearly when SPPS binary missing
         if: steps.bin.outputs.found != '1'
         run: |
           cat > ci-spps-job/attempt_run.json <<'EOF'
@@ -152,8 +143,49 @@ jobs:
             "error_message": "Could not download SPPS artifact; re-run Build SPPS or check PINNED.json run_id."
           }
           EOF
+          exit 1
+
+      - name: check-env + attempt-run fixture
+        env:
+          SPPS_BIN: ${{ steps.bin.outputs.path }}
+        working-directory: engine/adapter
+        run: |
+          set -euo pipefail
+          python -m sonoplan_adapter.cli check-env --spps-bin "$SPPS_BIN" \
+            | tee ../../ci-spps-job/check_env.json
+          set +e
+          python -m sonoplan_adapter.cli attempt-run ../fixtures/minimal_room/inputs \
+            --required-input config.xml \
+            --required-input mesh.cbin \
+            --required-input tetramesh.mbin \
+            --required-input speaker-test3.txt \
+            --report ../../ci-spps-job/attempt_run.json
+          CODE=$?
+          set -e
+          echo "attempt_exit=$CODE" | tee ../../ci-spps-job/attempt_exit.txt
+          # Copy SPPS stdout/stderr from report for debugging; keep workdir listing.
+          find ../fixtures/minimal_room/inputs -type f | tee ../../ci-spps-job/workdir_listing.txt
+          test "$CODE" -eq 0
+
+      - name: validate-outputs (no fake dB)
+        if: success()
+        working-directory: engine/adapter
+        run: |
+          set -euo pipefail
+          python -m sonoplan_adapter.cli validate-outputs ../fixtures/minimal_room/inputs \
+            --manifest ../fixtures/minimal_room/manifest.json --exit-code 0 \
+            | tee ../../ci-spps-job/validate_outputs.json
+          # Preserve a few real binary outputs in the report artifact (not invented maps).
+          mkdir -p ../../ci-spps-job/outputs
+          if [[ -d "../fixtures/minimal_room/inputs/Punctual receivers" ]]; then
+            cp -a "../fixtures/minimal_room/inputs/Punctual receivers" ../../ci-spps-job/outputs/ || true
+          fi
+          if [[ -f ../fixtures/minimal_room/inputs/statsSPPS.gabe ]]; then
+            cp -a ../fixtures/minimal_room/inputs/statsSPPS.gabe ../../ci-spps-job/outputs/ || true
+          fi
 
       - name: Upload job report artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: spps-job-report-${{ github.run_id }}
@@ -162,6 +194,7 @@ jobs:
           retention-days: 30
 
       - name: Job summary
+        if: always()
         run: |
           {
             echo "## SPPS job attempt"
@@ -169,8 +202,14 @@ jobs:
             echo "- Artifact pin: \`${{ steps.pin.outputs.artifact }}\`"
             echo "- Binary found: \`${{ steps.bin.outputs.found }}\`"
             echo "- Path: \`${{ steps.bin.outputs.path }}\`"
+            echo "- Fixture: \`engine/fixtures/minimal_room\` (official I-Simpa python_bindings mesh)"
             echo ""
-            echo "If attempt report shows \`FIXTURE_INPUTS_MISSING\`, fill"
-            echo "\`engine/fixtures/minimal_room/inputs\` (config.xml, mesh) — do not invent binaries."
-            echo "No heatmap / dB values are published by this workflow."
+            echo "Success requires real SPPS outputs + \`validate-outputs\`."
+            echo "No heatmap / invented dB values are published by this workflow."
+            if [[ -f ci-spps-job/attempt_run.json ]]; then
+              echo ""
+              echo '```json'
+              cat ci-spps-job/attempt_run.json
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

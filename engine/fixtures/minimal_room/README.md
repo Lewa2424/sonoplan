@@ -1,16 +1,48 @@
 # Fixture: minimal_room
 
-Статус: **scaffold** — нет бинарных `mesh.cbin` / `tetramesh.mbin` и нет golden-результатов, пока SPPS не собран и не прогнан.
+Статус: **inputs_ready** — официальные `mesh.cbin` / `tetramesh.mbin` из pinned I-Simpa + адаптированный `config.xml`.
 
-## План заполнения (после Docker-сборки)
+## Происхождение входов
 
-1. Собрать образ: `engine/scripts/build-spps.sh`
-2. Подготовить геометрию через `preprocess` + TetGen из того же pinned commit (или экспортировать эталон из I-Simpa).
-3. Положить в `inputs/`: `config.xml`, `mesh.cbin`, `tetramesh.mbin`
-4. Прогнать SPPS с `random_seed=0` и Debug/без внутренней MT для воспроизводимости (CAL-005).
-5. Сохранить эталонные выходы в `expected/` с checksums; обновить `golden_values` в `manifest.json`.
-6. Не подменять карту заранее нарисованным изображением.
+| Файл | Источник (commit `929a5c8e…`) |
+|------|-------------------------------|
+| `inputs/mesh.cbin` | `src/python_bindings/tests/mesh.cbin` (без изменений) |
+| `inputs/tetramesh.mbin` | `src/python_bindings/tests/tetramesh.mbin` (без изменений) |
+| `inputs/speaker-test3.txt` | `src/spps/tests/speaker-test3.txt` (без изменений) |
+| `inputs/config.xml` | Структура `src/spps/tests/config.xml`, адаптирована под этот mesh |
 
-## Контракт имён
+Адаптация config (не выдуманный mesh):
 
-Имена файлов согласованы с upstream `src/spps/tests/config.xml` на pinned commit. Локаль XML в адаптере — UTF-8 + точка как десятичный разделитель (ENG-007); upstream-примеры с запятой не копировать вслепую.
+- материалы `id=100` и `id=101` (face `idMat` в официальном mesh);
+- без поверхностных приёмников (`idRs=-1` в mesh);
+- `workingdirectory=.`, десятичный разделитель — точка (ENG-007);
+- `random_seed=0`, урезанный `nbparticules` для CI smoke;
+- расчётные полосы: 100 Hz и 1000 Hz.
+
+Лицензия upstream: GPLv3 — см. `inputs/ORIGIN.txt` и `docs/engine-licenses.md`.
+
+## Воспроизведение / обновление
+
+```bash
+./engine/scripts/prepare-minimal-room-fixture.sh
+# или на Windows без clone:
+python engine/scripts/prepare-minimal-room-fixture.py
+```
+
+## Прогон
+
+Linux worker / GitHub Actions:
+
+```bash
+export SPPS_BIN=/path/to/spps
+cd engine/adapter
+python -m sonoplan_adapter.cli attempt-run ../fixtures/minimal_room/inputs \
+  --required-input config.xml \
+  --required-input mesh.cbin \
+  --required-input tetramesh.mbin \
+  --required-input speaker-test3.txt
+python -m sonoplan_adapter.cli validate-outputs ../fixtures/minimal_room/inputs \
+  --manifest ../fixtures/minimal_room/manifest.json --exit-code 0
+```
+
+Golden-выходы в `expected/` и численный допуск SCI-003 — после первого успешного прогона с декодером `.recp` (не подставлять дБ вручную).

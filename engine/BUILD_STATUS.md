@@ -50,8 +50,9 @@ Unit-тесты валидации выходов — OK без Docker. `SPPS_BI
 ## Осталось для полного STG-01 / stub STG-04
 
 1. ~~Linux-сборка + `binary_checksum`~~ — готово.
-2. Заполнить `fixtures/minimal_room/inputs` и прогнать эталон на Linux с `SPPS_BIN`.
+2. ~~Заполнить `fixtures/minimal_room/inputs`~~ — официальные `mesh.cbin`/`tetramesh.mbin` из I-Simpa `python_bindings/tests` + адаптированный `config.xml` (см. `inputs/ORIGIN.txt`). Прогон: workflow `run-spps-job.yml`.
 3. Worker: выставлять `SPPS_BIN` на Linux CI/VPS (не запускать бинарник на Windows).
+4. Golden decode `.recp` + SCI-003 допуск — после первого успешного CI-прогона (не публиковать выдуманные дБ).
 
 **Не блокер для STG-02:** web/API каркас на Windows без SPPS.
 
@@ -63,6 +64,7 @@ Unit-тесты валидации выходов — OK без Docker. `SPPS_BI
 
 ## Следующий шаг
 
-1. Download: см. [`docs/spps-ci-artifact.md`](../docs/spps-ci-artifact.md).
-2. На Linux: `export SPPS_BIN=.../spps`, fixtures inputs, `./scripts/run-spps-fixture.sh`.
-3. Подключить worker → adapter с `SPPS_BIN` (STG-04).
+1. Download SPPS: см. [`docs/spps-ci-artifact.md`](../docs/spps-ci-artifact.md).
+2. CI: `Run SPPS Job` (`run-spps-job.yml`) — attempt-run + validate-outputs на `minimal_room`.
+3. Пересборка inputs: `./engine/scripts/prepare-minimal-room-fixture.sh` (или `.py`).
+4. Подключить worker → adapter с `SPPS_BIN` (STG-04).
