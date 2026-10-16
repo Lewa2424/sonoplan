@@ -30,10 +30,12 @@
 1. Всегда итерировать `recepteur_p_List` при депозите (link — опционально).
 2. Всегда задавать `cdt_vol=(c·ρ)/V_sphere` для каждого punctual receiver.
 3. Дополнительно линковать тетраэдры в `rayon+10`.
-4. **Снять gate** в UTILISER `FreeParticleTranslation`: всегда вызывать
-   `ParticuleFreeTranslation` (раньше вызов шёл только при ненулевом
-   `linkedRecepteurP` на end-tetra — депозит не вызывался).
-5. Маркер `__attribute__((used))` + `sonoplan_spps_touch_marker()` на UTILISER-пути;
+4. **Снять gate** в **UTILISER** (скомпилированный) `FreeParticleTranslation`:
+   всегда вызывать `ParticuleFreeTranslation`. Не путать с `#ifndef`-overload
+   (мёртвый код), который и так всегда вызывает deposit.
+5. Robust chord: если RaySphere даёт Lintersect=0, но endpoint внутри сферы —
+   брать длину шага (реальная энергия частицы, не фейк дБ).
+6. Маркер `__attribute__((used))` + touch на UTILISER-пути;
    `build-spps-native.sh` **падает**, если `grep -a` не находит маркер в `spps`.
 
 **UTILISER:** оставляем `#define` — ветка `#ifndef` не компилируется.

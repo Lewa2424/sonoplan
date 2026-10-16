@@ -4,23 +4,24 @@
 Do NOT undefine UTILISER_MAILLAGE_OPTIMISATION: the upstream #ifndef path does
 not compile against the current core types (doInvertNormal / percCollision).
 
-Facts from CI (Total energy.recp > 0, punctual .recp == 0, ExpandPunctual
-cdt_vol=3311.6, marker present):
+Root cause of CI punctual energySumGlobal=0 (Total energy.recp CAN be >0):
 
-* Upstream UTILISER FreeParticleTranslation already always calls
-  ParticuleFreeTranslation (no linkedRecepteurP gate). A prior "ungate" that
-  rewrote the #ifndef overload was a false fix (dead code under UTILISER).
-* Deposit-all + force cdt_vol alone still left energySumGlobal=0 — RaySphere
-  can clamp to Lintersect==0 while the particle is inside the sphere.
+1. Under UTILISER (the compiled path), FreeParticleTranslation only calls
+   ParticuleFreeTranslation when ``currentTetra->linkedRecepteurP`` is set.
+   Do NOT confuse this with the #ifndef overload (dead code) that always calls.
+2. ParticuleFreeTranslation only walked the link list (not all receivers).
+3. ``cdt_vol`` may stay 0 if indexTetra miss → save writes energy*0.
+4. RaySphere can clamp chord to 0 while the particle is inside the sphere.
+5. Unused ``static const`` markers are stripped by -O2.
 
 This script (string transforms only — do NOT git-apply documenting ``*.patch``):
 
-1. Always set ``cdt_vol = (c·ρ)/V_sphere`` for every punctual receiver.
+1. Always set ``cdt_vol = (c·ρ)/V_sphere``.
 2. Link every tetra within rayon+10.
 3. Deposit against the full ``recepteur_p_List``.
-4. If RaySphere chord clamps to 0 but an endpoint is inside the sphere, keep
-   presence length = step length (no invented dB — still real particle energy).
-5. Embed a ``__attribute__((used))`` marker touched from the UTILISER path.
+4. **Ungate UTILISER** FreeParticleTranslation (always call deposit).
+5. Robust chord: if RaySphere clamps to 0 but endpoint is inside, use step length.
+6. Used marker touched from the UTILISER path; build fails if absent in binary.
 """
 
 from __future__ import annotations
@@ -79,21 +80,20 @@ _NEW_DEPOSIT = """	// SonoPlan: deposit against ALL punctual receivers (tetra li
 		{
 			t_Recepteur_P* currentRecp=recpList->at(idrecp);"""
 
-_OLD_UTILISER_FPT = (
-    "void CalculationCore::FreeParticleTranslation"
-    "(CONF_PARTICULE &configurationP,const vec3 &translationVector)\n"
-    "{\n"
-    "\treportTool->ParticuleFreeTranslation"
-    "(configurationP,configurationP.position+translationVector);"
+# Compiled UTILISER FreeParticleTranslation — NOT the #ifndef overload.
+_OLD_UTILISER_GATE = (
+    "\tif(configurationP.currentTetra->linkedRecepteurP)\n"
+    "\t\treportTool->ParticuleFreeTranslation("
+    "configurationP,configurationP.position+translationVector);"
 )
 
-_NEW_UTILISER_FPT = (
-    "void CalculationCore::FreeParticleTranslation"
-    "(CONF_PARTICULE &configurationP,const vec3 &translationVector)\n"
-    "{\n"
+_NEW_UTILISER_GATE = (
+    "\t// SonoPlan: always deposit under UTILISER (compiled path; "
+    "do not confuse with #ifndef overload).\n"
     "\tsonoplan_spps_touch_marker();\n"
-    "\treportTool->ParticuleFreeTranslation"
-    "(configurationP,configurationP.position+translationVector);"
+    "\tif(configurationP.currentTetra)\n"
+    "\t\treportTool->ParticuleFreeTranslation("
+    "configurationP,configurationP.position+translationVector);"
 )
 
 _OLD_DEPOSIT_BODY = """\t\t\t\t\tfloat norm_dir=(direction).length();
@@ -181,20 +181,20 @@ def _robust_chord_deposit(src: Path) -> None:
     print(f"robust-chord: applied in {target}")
 
 
-def _touch_utiliser_fpt(src: Path) -> None:
+def _ungate_utiliser_fpt(src: Path) -> None:
+    """Drop linkedRecepteurP gate on the compiled UTILISER FreeParticleTranslation."""
     target = src / "src" / "spps" / "CalculationCore.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
-    if "sonoplan_spps_touch_marker();\n\treportTool->ParticuleFreeTranslation" in text:
-        print(f"utiliser-touch: already applied in {target}")
+    if "SonoPlan: always deposit under UTILISER (compiled path" in text:
+        print(f"utiliser-ungate: already applied in {target}")
         return
-    idx = text.rfind(_OLD_UTILISER_FPT)
-    if idx < 0:
+    if _OLD_UTILISER_GATE not in text:
         raise SystemExit(
-            f"utiliser-touch: UTILISER FreeParticleTranslation not found in {target}"
+            f"utiliser-ungate: UTILISER linkedRecepteurP gate not found in {target}"
         )
-    text = text[:idx] + _NEW_UTILISER_FPT + text[idx + len(_OLD_UTILISER_FPT) :]
+    text = text.replace(_OLD_UTILISER_GATE, _NEW_UTILISER_GATE, 1)
     target.write_text(text, encoding="utf-8", newline="\n")
-    print(f"utiliser-touch: applied in {target}")
+    print(f"utiliser-ungate: applied in {target}")
 
 
 def _embed_marker(src: Path) -> None:
@@ -210,39 +210,45 @@ def _embed_marker(src: Path) -> None:
         "",
         text,
     )
-    text = text.replace("\tsonoplan_spps_touch_marker();\n", "")
-    # Undo prior false-fix that rewrote the #ifndef overload.
-    text = text.replace(
-        "\t// SonoPlan: always deposit under UTILISER "
-        "(link gate skipped energy on smoke meshes).\n",
-        "",
-    )
-    ifndef_broken = (
-        "\tif(configurationP.currentTetra)\n"
-        "\t\treportTool->ParticuleFreeTranslation("
-        "configurationP,configurationP.position+translationVector);"
-    )
-    ifndef_ok = (
-        "\tif(configurationP.currentTetra->linkedRecepteurP)\n"
-        "\t\treportTool->ParticuleFreeTranslation("
-        "configurationP,configurationP.position+translationVector);"
-    )
-    if ifndef_broken in text and ifndef_ok not in text:
-        text = text.replace(ifndef_broken, ifndef_ok, 1)
+    # Do NOT strip touch call sites that belong to UTILISER ungating.
 
     needle = '#include "CalculationCore.h"'
     if needle not in text:
         raise SystemExit(f"patch-marker: include missing in {target}")
-    blob = (
-        needle
-        + "\n"
-        + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
-        + "static void sonoplan_spps_touch_marker(void) "
-        + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
-    )
-    text = text.replace(needle, blob, 1)
+    if f'"{MARKER}"' not in text:
+        blob = (
+            needle
+            + "\n"
+            + f'__attribute__((used)) static const char sonoplan_spps_patch[] = "{MARKER}";\n'
+            + "static void sonoplan_spps_touch_marker(void) "
+            + "{ volatile const char* p = sonoplan_spps_patch; (void)p[0]; }\n"
+        )
+        text = text.replace(needle, blob, 1)
+
+    if "SonoPlan: always deposit under UTILISER (compiled path" not in text:
+        if _OLD_UTILISER_GATE not in text:
+            raise SystemExit("patch-marker: UTILISER gate missing after marker scrub")
+        text = text.replace(_OLD_UTILISER_GATE, _NEW_UTILISER_GATE, 1)
+    elif "sonoplan_spps_touch_marker();" not in text:
+        text = text.replace(
+            "\t// SonoPlan: always deposit under UTILISER (compiled path; "
+            "do not confuse with #ifndef overload).\n"
+            "\tif(configurationP.currentTetra)\n",
+            "\t// SonoPlan: always deposit under UTILISER (compiled path; "
+            "do not confuse with #ifndef overload).\n"
+            "\tsonoplan_spps_touch_marker();\n"
+            "\tif(configurationP.currentTetra)\n",
+            1,
+        )
+
+    if "sonoplan_spps_touch_marker();" not in text:
+        raise SystemExit("patch-marker: touch call missing from UTILISER path")
+    if "currentTetra->linkedRecepteurP)\n\t\treportTool->ParticuleFreeTranslation" in text:
+        raise SystemExit(
+            "patch-marker: UTILISER linkedRecepteurP gate still present after ungate"
+        )
+
     target.write_text(text, encoding="utf-8", newline="\n")
-    _touch_utiliser_fpt(src)
     print(f"patch-marker: embedded {MARKER} in {target}")
 
 
@@ -262,6 +268,7 @@ def main(argv: list[str] | None = None) -> int:
     _link_and_cdt(src)
     _deposit_all_receivers(src)
     _robust_chord_deposit(src)
+    _ungate_utiliser_fpt(src)
     _embed_marker(src)
 
     init = (src / "src" / "spps" / "sppsInitialisation.cpp").read_text(encoding="utf-8")
@@ -277,10 +284,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("ERROR: deposit-all-recp missing after apply")
     if "SonoPlan: if RaySphere clamp wiped the chord" not in report:
         raise SystemExit("ERROR: robust-chord missing after apply")
-    if "sonoplan_spps_touch_marker();\n\treportTool->ParticuleFreeTranslation" not in core:
-        raise SystemExit("ERROR: UTILISER touch+FPT call missing after apply")
-    if "SonoPlan: always deposit under UTILISER" in core:
-        raise SystemExit("ERROR: false #ifndef ungate comment still present")
+    if "SonoPlan: always deposit under UTILISER (compiled path" not in core:
+        raise SystemExit("ERROR: utiliser-ungate missing after apply")
+    if "sonoplan_spps_touch_marker();" not in core:
+        raise SystemExit("ERROR: marker touch missing from UTILISER path")
+    if "currentTetra->linkedRecepteurP)\n\t\treportTool->ParticuleFreeTranslation" in core:
+        raise SystemExit("ERROR: UTILISER linkedRecepteurP gate still present")
     types = (src / "src" / "spps" / "sppsTypes.h").read_text(encoding="utf-8")
     if "#define UTILISER_MAILLAGE_OPTIMISATION" not in types:
         raise SystemExit(
@@ -288,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     print(
         f"SPPS patches OK (marker={MARKER}, UTILISER kept, "
-        "deposit-all+cdt_vol+robust-chord)"
+        "deposit-all+cdt_vol+robust-chord+utiliser-ungate)"
     )
     return 0
 
