@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <configuration workingdirectory="./">
-  <simulation recepteurss_directory="recepteurss" recepteurss_filename="Sound_level.csbin" recepteurss_cut_filename="rs_cut.csbin" receiversp_directory="Punctual receivers" receiversp_filename="Sound level.recp" receiversp_filename_adv="Advanced sound level.gap" cumul_filename="Total energy.recp" modelName="mesh.cbin" tetrameshFileName="tetramesh.mbin" abs_atmo_calc="1" enc_calc="0" trans_calc="0" direct_calc="0" duree_simulation="1" output_recp_bysource="0" output_recs_byfreq="0" surf_receiv_method="0" random_seed="1" computation_method="1" nbparticules="20000" nbparticules_rendu="0" pasdetemps="5e-4" rayon_recepteurp="2" trans_epsilon="5" intensity_filename="Intensity vector.rpi" intensity_folder="IntensityAnimation" intensity_rp_filename="ponct_intensity.gabe" stats_filename="statsSPPS.gabe" particules_directory="particles" particules_filename="particles.pbin" directivities_directory="">
+  <simulation recepteurss_directory="recepteurss" recepteurss_filename="Sound_level.csbin" recepteurss_cut_filename="rs_cut.csbin" receiversp_directory="Punctual receivers" receiversp_filename="Sound level.recp" receiversp_filename_adv="Advanced sound level.gap" cumul_filename="Total energy.recp" modelName="mesh.cbin" tetrameshFileName="tetramesh.mbin" abs_atmo_calc="1" enc_calc="0" trans_calc="0" direct_calc="0" duree_simulation="1" output_recp_bysource="0" output_recs_byfreq="0" surf_receiv_method="0" random_seed="1" computation_method="0" nbparticules="20000" nbparticules_rendu="0" pasdetemps="5e-4" rayon_recepteurp="1" trans_epsilon="5" intensity_filename="Intensity vector.rpi" intensity_folder="IntensityAnimation" intensity_rp_filename="ponct_intensity.gabe" stats_filename="statsSPPS.gabe" particules_directory="particles" particules_filename="particles.pbin" directivities_directory="">
     <freq_enum>
       <bfreq freq="20000" docalc="0" />
     <bfreq freq="16000" docalc="0" />
@@ -96,7 +96,7 @@
     </source>
   </sources>
 <recepteursp>
-    <recepteur_ponctuel id="3001" name="r_near" lbl="r_near" x="2.100000" y="2" z="2" u="-1" v="0" w="0">
+    <recepteur_ponctuel id="3001" name="r_near" lbl="r_near" x="2" y="2" z="2" u="-1" v="0" w="0">
       <bfreq freq="20000" db="-6.859580" />
     <bfreq freq="16000" db="-7.859580" />
     <bfreq freq="12500" db="-8.859579" />

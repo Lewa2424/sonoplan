@@ -60,14 +60,17 @@ MATERIAL_IDS = (0,)
 # SOURCE_TYPE_OMNIDIRECTION in I-Simpa coreTypes.h
 SOURCE_TYPE_OMNI = 0
 
-# Source + punctual receivers inside official cube bbox [0,5]³
-# (same cluster as upstream src/spps/tests/config.xml).
+# Source + punctual receivers inside official cube bbox [0,5]³.
+# Cube tet mesh (6 tetras): source (2,2,2) lands in tetra 1 first;
+# a 0.1 m offset can put the receiver in a *different* tetra. With
+# UTILISER_MAILLAGE_OPTIMISATION, deposit only checks linkedRecepteurP
+# on the *end* tetra of each step — so keep r_near on the source point
+# (same containing tetra after InitSources/InitRecepteurP).
 SOURCE_POS = (2.0, 2.0, 2.0)
-# Keep upstream-like ring at 1 m, plus r_near on the source tetra
-# (slightly offset so CheckSourcePosition / vertex nudge still OK).
 RECEIVERS = [
     # id, name, x, y, z, u, v, w
-    (3001, "r_near", 2.1, 2.0, 2.0, -1.0, 0.0, 0.0),
+    # Colocated with source: Init links the same tetra particles start in.
+    (3001, "r_near", 2.0, 2.0, 2.0, -1.0, 0.0, 0.0),
     (3431, "r_top", 2.0, 2.0, 3.0, 0.0, 0.0, -1.0),
     (3911, "r_right", 2.0, 1.0, 2.0, 0.0, 1.0, 0.0),
     (3751, "r_left", 2.0, 3.0, 2.0, 0.0, -1.0, 0.0),
@@ -176,15 +179,17 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     if seed == 0:
         raise ValueError("random_seed must be != 0 (SPPS skips SetRandSeed when 0)")
     sim.set("random_seed", str(seed))
-    sim.set("computation_method", "1")
+    # 0 = probabilistic absorption (stats show ABS_SURF); 1 = energetic.
+    # Use 0 so CI stats prove particles hit walls (nonzero material absorbs).
+    sim.set("computation_method", "0")
     sim.set("nbparticules", str(nb_particles))
     sim.set("nbparticules_rendu", "0")
     # Scientific notation: atof("5e-4") is robust across locales.
     sim.set("pasdetemps", "5e-4")
     # Integer metres — never parsed as 0 by locale-sensitive atof.
     # Must be > source↔receiver distance (SPPS uses strict < rayon).
-    # Cluster is at 1 m from source → rayon=2 so source starts inside spheres.
-    sim.set("rayon_recepteurp", "2")
+    # Ring receivers are 1 m away; r_near is colocated → rayon=1 is enough.
+    sim.set("rayon_recepteurp", "1")
     sim.set("trans_epsilon", "5")
     sim.set("intensity_filename", "Intensity vector.rpi")
     sim.set("intensity_folder", "IntensityAnimation")

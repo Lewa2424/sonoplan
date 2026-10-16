@@ -17,7 +17,7 @@
 - без поверхностных приёмников (`idRs=-1`);
 - `workingdirectory=./`, десятичный разделитель — точка (ENG-007);
 - `random_seed=1` (≠0: SetRandSeed + single-thread), `nbparticules=20000`;
-- `directivite=0` (omni), `rayon_recepteurp=2`, `duree_simulation=1`, `pasdetemps=5e-4`;
+- `directivite=0` (omni), `rayon_recepteurp=1`, `computation_method=0`, `r_near` colocated with source, `duree_simulation=1`, `pasdetemps=5e-4`;
 - runner принудительно `LC_ALL=C` / `LC_NUMERIC=C`;
 - расчётные полосы: 100 Hz и 1000 Hz.
 
