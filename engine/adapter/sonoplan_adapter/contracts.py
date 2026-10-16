@@ -16,7 +16,8 @@ class QuantityKind(str, Enum):
 
     SOUND_POWER_LEVEL_LW = "Lw_dB"
     SOUND_PRESSURE_LEVEL_LP = "Lp_dB"
-    ENERGY_DENSITY = "energy_Pa2"  # placeholder until CAL-009 procedure is confirmed
+    # .recp on disk (I-Simpa Docs/file_recp.rst): homogeneous to instantaneous p².
+    ENERGY_P2_HOMOGENEOUS = "energy_p2_homogeneous"
     UNKNOWN = "unknown"
 
 

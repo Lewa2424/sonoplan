@@ -1,0 +1,16 @@
+Expected SPPS outputs for decoder / SCI-003 (not invented).
+
+Source: GitHub Actions run https://github.com/Lewa2424/sonoplan/actions/runs/38870337557
+Artifact: spps-job-report-38870337557
+I-Simpa / SPPS pin: 929a5c8e5f590b189f29155faeff8670f3699479
+SonoPlan commit that produced outputs: c8c4d2fb2294b67583e81bc8f0fbc33125e7c389
+
+Files:
+  Punctual receivers/r_front/Sound level.recp  — GABE v2, bands 100 Hz + 1000 Hz, 200 timesteps
+  statsSPPS.gabe                               — particle statistics
+
+Notes:
+  - On-disk .recp values are p²-homogeneous energy (I-Simpa Docs/file_recp.rst).
+  - This artifact's energy grid is all zeros; lp_db must stay null (not 0 dB).
+  - SCI-003 golden Lp vs I-Simpa GUI: pending (no reference numbers recorded yet).
+  - Do not replace these with hand-written dB tables.

@@ -146,3 +146,10 @@ engine/fixtures/minimal_room/inputs/speaker-test3.txt
 engine/scripts/adapt-minimal-room-config.py
 engine/scripts/prepare-minimal-room-fixture.py
 engine/scripts/prepare-minimal-room-fixture.sh
+engine/adapter/sonoplan_adapter/gabe.py
+engine/adapter/tests/__init__.py
+engine/adapter/tests/test_recp_decode.py
+engine/fixtures/minimal_room/expected/ORIGIN.txt
+engine/fixtures/minimal_room/expected/Punctual receivers/r_front/Sound level.recp
+engine/fixtures/minimal_room/expected/statsSPPS.gabe
+engine/fixtures/minimal_room/expected/README.md

@@ -52,7 +52,7 @@ Unit-тесты валидации выходов — OK без Docker. `SPPS_BI
 1. ~~Linux-сборка + `binary_checksum`~~ — готово.
 2. ~~Заполнить `fixtures/minimal_room/inputs`~~ — официальные `mesh.cbin`/`tetramesh.mbin` из I-Simpa `python_bindings/tests` + адаптированный `config.xml` (см. `inputs/ORIGIN.txt`). Прогон: workflow `run-spps-job.yml`.
 3. Worker: выставлять `SPPS_BIN` на Linux CI/VPS (не запускать бинарник на Windows).
-4. Golden decode `.recp` + SCI-003 допуск — после первого успешного CI-прогона (не публиковать выдуманные дБ).
+4. ~~Decode `.recp` (GABE)~~ — декодер в `engine/adapter` по libsimpa `gabe.cpp` + Docs/file_recp.rst; fixture `expected/` с CI run `38870337557`. SCI-003 golden 0.1 dB — **pending** (нет эталонных Lp; энергия в артефакте = 0 → `lpDb=null`).
 
 **Не блокер для STG-02:** web/API каркас на Windows без SPPS.
 

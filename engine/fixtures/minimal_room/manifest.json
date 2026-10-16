@@ -34,7 +34,8 @@
     }
   ],
   "golden_values": null,
-  "golden_values_note": "SCI-003: compare decoded Lp with I-Simpa on identical inputs after first successful run; tolerance 0.1 dB for identical binary postprocess. Do not publish invented dB.",
+  "golden_status": "decoder_ok_golden_pending",
+  "golden_values_note": "SCI-003: decoder parses real CI .recp (energy p²-homogeneous). Numerical golden Lp vs I-Simpa GUI (0.1 dB) pending — no reference numbers yet. Artifact energy was all zeros → lp_db=null (not 0 dB).",
   "seed": 0,
   "multithreading_for_repro": false,
   "prepare_script": "engine/scripts/prepare-minimal-room-fixture.sh"

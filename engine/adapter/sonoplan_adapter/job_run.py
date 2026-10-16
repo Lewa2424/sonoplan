@@ -17,6 +17,7 @@ from .env import (
     check_spps_environment,
     fixture_inputs_ready,
 )
+from .results import decode_spps_workdir
 from .runner import run_spps
 
 
@@ -138,29 +139,84 @@ def build_result_manifest(
     revision_id: str,
     snapshot_hash: str,
     attempt: CalculationAttempt,
+    decoded: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """ResultManifest-shaped JSON. No invented dB fields."""
-    map_available = bool(attempt.ok and attempt.artifact_paths)
+    """ResultManifest-shaped JSON. No invented dB / heatmap fields.
+
+    When ``decoded`` is provided (post-SPPS GABE/.recp decode), punctual
+    summaries are attached. Surface map stays unavailable until .csbin decode.
+    Lp is published only when energy_sum > 0 (zero energy ≠ 0 dB).
+    """
+    work = Path(attempt.work_dir) if attempt.work_dir else None
+    if decoded is None and attempt.ok and work is not None and work.is_dir():
+        decoded = decode_spps_workdir(work).to_dict()
+
+    punctual = list((decoded or {}).get("punctual") or [])
+    any_lp = any(p.get("lpDbGlobal") is not None for p in punctual)
+    decode_ok = bool((decoded or {}).get("ok"))
+
+    # Surface heatmap is never invented from punctual files.
+    map_available = False
+    if attempt.ok and decode_ok and punctual:
+        map_deferred = (
+            "Punctual .recp decoded (energy p^2-homogeneous). "
+            "Surface heatmap deferred until .csbin decode — not published from punctual files."
+        )
+    elif attempt.ok:
+        map_deferred = (
+            "SPPS outputs present but punctual decode incomplete; "
+            "map not published."
+        )
+    else:
+        map_deferred = (
+            "Map deferred: no valid SPPS run (no invented dB)."
+        )
+
+    quantity = "energy_p2_homogeneous" if punctual else None
+    unit = "Pa2_homogeneous" if punctual else None
+    display_quantity = "Lp_dB" if any_lp else None
+    display_unit = "dB" if any_lp else None
+
     return {
         "schemaVersion": "1.0",
         "jobId": job_id,
         "revisionId": revision_id,
         "snapshotHash": snapshot_hash,
-        "quantity": None,
-        "unit": None,
+        "quantity": quantity,
+        "unit": unit,
+        "displayQuantity": display_quantity,
+        "displayUnit": display_unit,
         "grid": None,
         "masks": None,
         "artifactPaths": list(attempt.artifact_paths),
         "mapAvailable": map_available,
-        "mapDeferredReason": None
-        if map_available
-        else "Карта позже: нет декодированных акустических выборок (не подставляем дБ).",
+        "mapDeferredReason": map_deferred,
+        "punctualReceivers": punctual,
+        "decode": decoded,
+        "sci003Golden": {
+            "status": "decoder_ok_golden_pending",
+            "toleranceDb": 0.1,
+            "note": (
+                "SCI-003: numerical golden vs I-Simpa GUI on identical inputs "
+                "not yet recorded; do not invent reference Lp."
+            ),
+        },
         "notes": [
-            "Базовый SPPS не заявляет дифракцию/интерференцию/моды как рассчитанные.",
-            "Lw ≠ Lp; значения дБ публикуются только после проверенного декодера выходов.",
+            "Base SPPS does not claim diffraction/interference/modal physics as computed.",
+            "Lw != Lp; .recp stores p^2-homogeneous energy; "
+            "Lp = 10*log10(E*(1/(20e-6 Pa)^2)) after energy sum.",
+            "Zero receiver energy != 0 dB / silence (lpDbGlobal=null).",
         ],
         "attempt": attempt.to_dict(),
     }
+
+
+def write_result_manifest(path: Path, manifest: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_attempt_report(path: Path, attempt: CalculationAttempt) -> None:

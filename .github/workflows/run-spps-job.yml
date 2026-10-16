@@ -121,7 +121,7 @@ jobs:
 
       - name: Adapter unit tests (no binary required)
         working-directory: engine/adapter
-        run: python -m unittest tests.test_validate_outputs -v
+        run: python -m unittest discover -s tests -v
 
       - name: ENG-009 broken_exit0 must fail validation
         working-directory: engine/adapter
@@ -195,6 +195,34 @@ jobs:
           if [[ -f ../fixtures/minimal_room/inputs/statsSPPS.gabe ]]; then
             cp -a ../fixtures/minimal_room/inputs/statsSPPS.gabe ../../ci-spps-job/outputs/ || true
           fi
+
+      - name: decode-outputs + ResultManifest (post-SPPS)
+        if: success()
+        working-directory: engine/adapter
+        run: |
+          set -euo pipefail
+          # Decode real .recp (GABE energy); write ResultManifest JSON into artifact.
+          # mapAvailable stays false — no invented heatmap from punctual files.
+          python -m sonoplan_adapter.cli decode-outputs ../fixtures/minimal_room/inputs \
+            --job-id "ci-${{ github.run_id }}" \
+            --revision-id "fixture-minimal_room" \
+            --snapshot-hash "$(python3 -c 'print("0"*64)')" \
+            --manifest-out ../../ci-spps-job/result_manifest.json \
+            | tee ../../ci-spps-job/decode_outputs.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          man = json.loads(Path("../../ci-spps-job/result_manifest.json").read_text(encoding="utf-8"))
+          assert man.get("mapAvailable") is False, "must not publish invented heatmap"
+          assert man.get("quantity") == "energy_p2_homogeneous"
+          assert man.get("sci003Golden", {}).get("status") == "decoder_ok_golden_pending"
+          punctual = man.get("punctualReceivers") or []
+          assert punctual, "expected at least one decoded punctual receiver"
+          for p in punctual:
+              if p.get("energySumGlobal", 0) == 0:
+                  assert p.get("lpDbGlobal") is None, "zero energy must not become 0 dB"
+          print("result_manifest OK:", len(punctual), "receivers; mapAvailable=false")
+          PY
 
       - name: Upload job report artifact
         if: always()

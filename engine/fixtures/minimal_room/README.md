@@ -45,4 +45,5 @@ python -m sonoplan_adapter.cli validate-outputs ../fixtures/minimal_room/inputs 
   --manifest ../fixtures/minimal_room/manifest.json --exit-code 0
 ```
 
-Golden-выходы в `expected/` и численный допуск SCI-003 — после первого успешного прогона с декодером `.recp` (не подставлять дБ вручную).
+`expected/` содержит реальные `.recp` / `statsSPPS.gabe` с CI run `38870337557`.
+Декодер: `sonoplan_adapter.cli decode-outputs`. SCI-003 golden 0.1 dB — **pending** (нет эталонных Lp).

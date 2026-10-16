@@ -38,11 +38,11 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `services/api/src/sonoplan_api/job_execution.py` | inline/worker: adapter → fail codes / ResultManifest |
 | `services/api/alembic` | `projects` / `drafts` / `revisions` / **`jobs`** |
 | `services/worker` | Celery `sonoplan.run_calculation` → `execute_job` |
-| `engine/adapter` | env gates, runner, validate_outputs, `attempt-run` CLI |
+| `engine/adapter` | env gates, runner, validate_outputs, GABE/.recp decode, `attempt-run` / `decode-outputs` CLI |
 | `engine/fixtures/minimal_room` | scaffold inputs (блокер полного прогона ядра) |
 | `engine/PINNED.json` | I-Simpa commit + `binary_checksum` + artifact run id |
 | `.github/workflows/build-spps.yml` | сборка Linux SPPS |
-| `.github/workflows/run-spps-job.yml` | download artifact → adapter attempt → report artifact |
+| `.github/workflows/run-spps-job.yml` | download artifact → adapter attempt → decode-outputs → ResultManifest artifact |
 | `infra/docker-compose.yml` | optional local postgres, rabbitmq, minio; api/worker/web — profile stubs |
 | `infra/.env.example` | шаблон env; prod/staging Postgres = Neon (`sslmode=require`) |
 | `docs/` | ТЗ-выписки, `CHANGED_FILES.txt`, `spps-ci-artifact.md`, заметка Neon |
@@ -99,7 +99,7 @@ Jobs по умолчанию inline (`SONOPLAN_JOBS_INLINE=1`). На Windows job
 | Ревизия на расчёт | API `revisions.snapshot` | Неизменяема; `snapshotHash` |
 | Job | API `jobs` | `revisionId` + `snapshotHash`; Idempotency-Key |
 | UI selection / toolMode / camera | Zustand `editorStore` | Не входят в snapshotHash |
-| Результат | Worker/adapter → `result_manifest` | `mapAvailable` только при реальных выходах |
+| Результат | Worker/adapter → `result_manifest` | punctual `.recp` = energy p²-homogeneous; `mapAvailable` только после реального surface decode (не из punctual) |
 | Возможности ядра | `GET /capabilities` | **stub** |
 | Координаты / геометрия | `packages/domain` | X,Y пол, Z вверх; Three = X,Z,−Y |
 

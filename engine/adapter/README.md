@@ -41,3 +41,16 @@ python -m unittest discover -s tests -v
 python -m sonoplan_adapter.cli validate-outputs ..\fixtures\broken_exit0 `
   --manifest ..\fixtures\broken_exit0\manifest.json --exit-code 0
 ```
+
+## Decode `.recp` (GABE)
+
+`.recp` — контейнер GABE (libsimpa), на диске **энергия, однородная к p²**, не SPL.
+Конверсия GUI I-Simpa: `Lp = 10*log10(E * 1/(20µPa)²)` после суммирования энергии.
+Нулевая энергия → `lpDb=null` (не 0 дБ).
+
+```powershell
+cd engine\adapter
+python -m sonoplan_adapter.cli decode-outputs `
+  ..\fixtures\minimal_room\expected `
+  --manifest-out ..\..\ci-spps-job\result_manifest.json
+```
