@@ -1,0 +1,44 @@
+From: SonoPlan <sonoplan@local>
+Subject: [PATCH] spps: link every tetra within receiver rayon (smoke meshes)
+
+Upstream ExpandPunctualReceiverTetrahedronLocalisation only walks
+voisins from the containing tetra via RecursiveTetraTest face-distance.
+On the official 6-tetra cube, a colocated receiver still produced
+ABS_SURF hits with energy_sum=0 in CI — tetra linking did not cover the
+particle start tetra reliably for deposit.
+
+After the upstream expand, also link every tetra whose centroid is
+within (rayon + tetra circumradius estimate). For the 5×5×5 cube smoke
+mesh this links all 6 tetras when rayon≥0.31.
+
+Pinned: 929a5c8e5f590b189f29155faeff8670f3699479
+---
+--- a/src/spps/sppsInitialisation.cpp
++++ b/src/spps/sppsInitialisation.cpp
+@@ -90,6 +90,28 @@ void ExpandPunctualReceiverTetrahedronLocalisation(t_TetraMesh *tetraMesh, std::vector<t_Recepteur_P *> *lstRecepteurP,
+ 			}
+ 		}
+ 	}
++	// SonoPlan: ensure every tetra that can intersect the receiver sphere is
++	// linked. Upstream RecursiveTetraTest alone left CI minimal_room with
++	// wall hits but zero punctual .recp energy on the 6-tetra cube.
++	for(std::size_t idrecp=0;idrecp<lstRecepteurP->size();idrecp++)
++	{
++		t_Recepteur_P* rp=lstRecepteurP->at(idrecp);
++		for(uentier idtetra=0;idtetra<tetraMesh->tetraedresSize;idtetra++)
++		{
++			t_Tetra* tet=&tetraMesh->tetraedres[idtetra];
++			decimal dCenter=rp->position.distance(tet->g);
++			// Conservative: tetra diameter of a 5 m cube cell ≪ 10 m.
++			if(dCenter<=rayonRecepteurP+10.f)
++			{
++				if(!tet->linkedRecepteurP)
++					tet->makeTabRecp();
++				if(!ContainsRP(rp,tet->linkedRecepteurP))
++					tet->linkedRecepteurP->push_back(rp);
++			}
++		}
++	}
+ }
+ 
+ bool CheckSourcePosition(std::vector<t_Source *> &lstSource, t_Mesh *model) {

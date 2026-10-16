@@ -24,10 +24,11 @@
   "binary_checksum_note": "SHA-256 of Linux x86_64 `spps` from GitHub Actions artifact (not Windows). Do not execute on Windows host.",
   "binary_artifact": {
     "github_repo": "Lewa2424/sonoplan",
-    "github_run_id": "38867272211",
-    "github_run_url": "https://github.com/Lewa2424/sonoplan/actions/runs/38867272211",
+    "github_run_id": "38878095021",
+    "github_run_url": "https://github.com/Lewa2424/sonoplan/actions/runs/38878095021",
     "artifact_name": "spps-linux-x86_64-929a5c8e5f59",
     "pinned_at": "2026-10-16",
+    "pin_note": "Build after deposit-on-start-tetra patch (0d63e1b); SHA-256 unchanged vs prior pin — verify binary via Run SPPS Job energy>0.",
     "local_path_hint": "engine/binaries/spps-ci/spps-linux-x86_64-929a5c8e5f59/spps",
     "download_doc": "docs/spps-ci-artifact.md"
   },

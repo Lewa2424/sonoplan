@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <configuration workingdirectory="./">
-  <simulation recepteurss_directory="recepteurss" recepteurss_filename="Sound_level.csbin" recepteurss_cut_filename="rs_cut.csbin" receiversp_directory="Punctual receivers" receiversp_filename="Sound level.recp" receiversp_filename_adv="Advanced sound level.gap" cumul_filename="Total energy.recp" modelName="mesh.cbin" tetrameshFileName="tetramesh.mbin" abs_atmo_calc="1" enc_calc="0" trans_calc="0" direct_calc="0" duree_simulation="1" output_recp_bysource="0" output_recs_byfreq="0" surf_receiv_method="0" random_seed="1" computation_method="0" nbparticules="20000" nbparticules_rendu="0" pasdetemps="5e-4" rayon_recepteurp="1" trans_epsilon="5" intensity_filename="Intensity vector.rpi" intensity_folder="IntensityAnimation" intensity_rp_filename="ponct_intensity.gabe" stats_filename="statsSPPS.gabe" particules_directory="particles" particules_filename="particles.pbin" directivities_directory="">
+  <simulation recepteurss_directory="recepteurss" recepteurss_filename="Sound_level.csbin" recepteurss_cut_filename="rs_cut.csbin" receiversp_directory="Punctual receivers" receiversp_filename="Sound level.recp" receiversp_filename_adv="Advanced sound level.gap" cumul_filename="Total energy.recp" modelName="mesh.cbin" tetrameshFileName="tetramesh.mbin" abs_atmo_calc="1" enc_calc="0" trans_calc="0" direct_calc="0" duree_simulation="0.1" output_recp_bysource="0" output_recs_byfreq="0" surf_receiv_method="0" random_seed="1" computation_method="1" nbparticules="20000" nbparticules_rendu="0" pasdetemps="5e-4" rayon_recepteurp="0.31" trans_epsilon="5" intensity_filename="Intensity vector.rpi" intensity_folder="IntensityAnimation" intensity_rp_filename="ponct_intensity.gabe" stats_filename="statsSPPS.gabe" particules_directory="particles" particules_filename="particles.pbin" directivities_directory="">
     <freq_enum>
       <bfreq freq="20000" docalc="0" />
     <bfreq freq="16000" docalc="0" />
@@ -34,33 +34,33 @@
 <condition_atmospherique absatmo="0" disable_absatmo_computation="0" humidite="50" pression="101325" alog="0" blin="0" lst_soltype="1" z0="0.020000" temperature="20" />
 <surface_absorption_enum>
     <type_surface id="0" resistivite="100" side_material="1">
-      <bfreq freq="20000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="16000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="12500" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="10000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="8000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="6300" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="5000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="4000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="3150" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="2500" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="2000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="1600" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="1250" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="1000" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="800" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="630" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="500" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="400" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="315" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="250" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="200" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="160" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="125" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="100" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="80" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="63" absorb="0.050000" diffusion="0" loi="0" />
-    <bfreq freq="50" absorb="0.050000" diffusion="0" loi="0" />
+      <bfreq freq="20000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="16000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="12500" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="10000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="8000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="6300" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="5000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="4000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="3150" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="2500" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="2000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="1600" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="1250" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="1000" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="800" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="630" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="500" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="400" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="315" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="250" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="200" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="160" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="125" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="100" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="80" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="63" absorb="0" diffusion="0" loi="0" />
+    <bfreq freq="50" absorb="0" diffusion="0" loi="0" />
     </type_surface>
   </surface_absorption_enum>
 <subdomains />

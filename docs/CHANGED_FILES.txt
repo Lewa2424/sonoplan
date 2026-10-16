@@ -156,3 +156,6 @@ engine/fixtures/minimal_room/expected/README.md
 engine/patches/0001-spps-deposit-on-start-tetra.patch
 engine/patches/README.md
 engine/scripts/apply-spps-patches.py
+engine/scripts/prepare-official-spps-control.py
+engine/scripts/patch-tetramesh-idvolume.py
+engine/patches/0002-spps-link-all-tetras-within-rayon.patch

@@ -37,13 +37,13 @@ RUN git clone --filter=blob:none https://github.com/Universite-Gustave-Eiffel/I-
     && test "$(git rev-parse HEAD)" = "${ISIMPA_COMMIT}"
 
 WORKDIR /src/isimpa
-# Optional SonoPlan patches (empty until first numeric delta is approved)
+# SonoPlan patches (deposit-on-start-tetra; same as build-spps-native.sh)
 COPY patches/ /src/sonoplan-patches/
-RUN if ls /src/sonoplan-patches/*.patch 1>/dev/null 2>&1; then \
-      git apply --whitespace=nowarn /src/sonoplan-patches/*.patch; \
-    else \
-      echo "No .patch files yet (ENG-009 exit-code patch pending source apply)"; \
-    fi
+COPY scripts/apply-spps-patches.py /src/apply-spps-patches.py
+RUN mkdir -p /src/sonoplan-engine/patches /src/sonoplan-engine/scripts \
+    && cp -a /src/sonoplan-patches/. /src/sonoplan-engine/patches/ \
+    && cp /src/apply-spps-patches.py /src/sonoplan-engine/scripts/ \
+    && python3 /src/sonoplan-engine/scripts/apply-spps-patches.py /src/isimpa
 
 WORKDIR /src/isimpa/build
 RUN cmake .. \

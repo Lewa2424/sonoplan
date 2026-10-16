@@ -15,6 +15,8 @@ name: Run SPPS Job
       - "engine/PINNED.json"
       - "engine/scripts/prepare-minimal-room-fixture.*"
       - "engine/scripts/adapt-minimal-room-config.py"
+      - "engine/scripts/prepare-official-spps-control.py"
+      - "engine/scripts/patch-tetramesh-idvolume.py"
       - ".github/workflows/run-spps-job.yml"
 
 concurrency:
@@ -146,6 +148,110 @@ jobs:
           }
           EOF
           exit 1
+
+      - name: Checkout pinned I-Simpa (official control assets)
+        uses: actions/checkout@v4
+        with:
+          repository: Universite-Gustave-Eiffel/I-Simpa
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .tmp-isimpa-ci
+          fetch-depth: 1
+
+      - name: Official SPPS control (upstream config+cube, locale-safe only)
+        id: official
+        env:
+          SPPS_BIN: ${{ steps.bin.outputs.path }}
+        run: |
+          set -euo pipefail
+          OUT="engine/fixtures/official_spps_control/inputs"
+          python3 engine/scripts/prepare-official-spps-control.py \
+            --isimpa-root .tmp-isimpa-ci \
+            --out-dir "$OUT" \
+            --seed 1
+          # Control A: raw upstream cube idVolume (may be 1).
+          mkdir -p ci-spps-job/official_control
+          set +e
+          (
+            cd engine/adapter
+            python -m sonoplan_adapter.cli attempt-run ../fixtures/official_spps_control/inputs \
+              --required-input config.xml \
+              --required-input mesh.cbin \
+              --required-input tetramesh.mbin \
+              --required-input speaker-test3.txt \
+              --report ../../ci-spps-job/official_control/attempt_run_raw.json
+          )
+          RAW=$?
+          set -e
+          echo "official_raw_exit=$RAW" | tee ci-spps-job/official_control/attempt_exit_raw.txt
+          # Decode energy without failing the job yet — compare to minimal_room.
+          python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, "engine/adapter")
+          from sonoplan_adapter.results import read_punctual_sound_level
+          root = Path("engine/fixtures/official_spps_control/inputs/Punctual receivers")
+          rows = []
+          if root.is_dir():
+              for recp in sorted(root.glob("*/Sound level.recp")):
+                  r = read_punctual_sound_level(recp)
+                  rows.append({
+                      "receiverId": recp.parent.name,
+                      "energySumGlobal": r.energy_sum_global,
+                      "lpDbGlobal": r.lp_db_global,
+                  })
+          summary = {"receivers": rows, "nonzero": [x for x in rows if (x["energySumGlobal"] or 0) > 0]}
+          Path("ci-spps-job/official_control/energy_raw.json").write_text(
+              json.dumps(summary, indent=2), encoding="utf-8"
+          )
+          print("official_raw_nonzero", summary["nonzero"])
+          open("ci-spps-job/official_control/has_energy_raw.txt", "w", encoding="utf-8").write(
+              "1" if summary["nonzero"] else "0"
+          )
+          PY
+          # Control B: same inputs but idVolume forced to 0 (principal volume).
+          python3 engine/scripts/patch-tetramesh-idvolume.py \
+            engine/fixtures/official_spps_control/inputs/tetramesh.mbin --volume 0
+          set +e
+          (
+            cd engine/adapter
+            # wipe previous SPPS outputs so decode is from this run
+            rm -rf ../fixtures/official_spps_control/inputs/"Punctual receivers" \
+                   ../fixtures/official_spps_control/inputs/statsSPPS.gabe || true
+            python -m sonoplan_adapter.cli attempt-run ../fixtures/official_spps_control/inputs \
+              --required-input config.xml \
+              --required-input mesh.cbin \
+              --required-input tetramesh.mbin \
+              --required-input speaker-test3.txt \
+              --report ../../ci-spps-job/official_control/attempt_run_idv0.json
+          )
+          IDV=$?
+          set -e
+          echo "official_idv0_exit=$IDV" | tee ci-spps-job/official_control/attempt_exit_idv0.txt
+          python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, "engine/adapter")
+          from sonoplan_adapter.results import read_punctual_sound_level
+          root = Path("engine/fixtures/official_spps_control/inputs/Punctual receivers")
+          rows = []
+          if root.is_dir():
+              for recp in sorted(root.glob("*/Sound level.recp")):
+                  r = read_punctual_sound_level(recp)
+                  rows.append({
+                      "receiverId": recp.parent.name,
+                      "energySumGlobal": r.energy_sum_global,
+                      "lpDbGlobal": r.lp_db_global,
+                  })
+          summary = {"receivers": rows, "nonzero": [x for x in rows if (x["energySumGlobal"] or 0) > 0]}
+          Path("ci-spps-job/official_control/energy_idv0.json").write_text(
+              json.dumps(summary, indent=2), encoding="utf-8"
+          )
+          print("official_idv0_nonzero", summary["nonzero"])
+          open("ci-spps-job/official_control/has_energy_idv0.txt", "w", encoding="utf-8").write(
+              "1" if summary["nonzero"] else "0"
+          )
+          PY
+          echo "official_control_done=1" >> "$GITHUB_OUTPUT"
 
       - name: check-env + attempt-run fixture
         env:

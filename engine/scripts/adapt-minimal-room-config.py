@@ -168,9 +168,8 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     sim.set("enc_calc", "0")
     sim.set("trans_calc", "0")
     sim.set("direct_calc", "0")
-    # Integer seconds / metres where possible: survive bad LC_NUMERIC (atof).
-    # 1 s × 5e-4 s → 2000 steps; path length ~343 m in the 20×30×10 m room.
-    sim.set("duree_simulation", "1")
+    # Match upstream spps/tests smoke duration (0.1 s × 5e-4 → 200 steps).
+    sim.set("duree_simulation", "0.1")
     sim.set("output_recp_bysource", "0")
     sim.set("output_recs_byfreq", "0")
     sim.set("surf_receiv_method", "0")
@@ -179,17 +178,15 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     if seed == 0:
         raise ValueError("random_seed must be != 0 (SPPS skips SetRandSeed when 0)")
     sim.set("random_seed", str(seed))
-    # 0 = probabilistic absorption (stats show ABS_SURF); 1 = energetic.
-    # Use 0 so CI stats prove particles hit walls (nonzero material absorbs).
-    sim.set("computation_method", "0")
+    # Energetic method (1) matches upstream spps/tests/config.xml.
+    sim.set("computation_method", "1")
     sim.set("nbparticules", str(nb_particles))
     sim.set("nbparticules_rendu", "0")
     # Scientific notation: atof("5e-4") is robust across locales.
     sim.set("pasdetemps", "5e-4")
-    # Integer metres — never parsed as 0 by locale-sensitive atof.
-    # Must be > source↔receiver distance (SPPS uses strict < rayon).
-    # Ring receivers are 1 m away; r_near is colocated → rayon=1 is enough.
-    sim.set("rayon_recepteurp", "1")
+    # Upstream spps/tests rayon_recepteurp=0.31; r_near is 0.1 m from source
+    # so the source tetra starts inside the receiver sphere (strict < rayon).
+    sim.set("rayon_recepteurp", "0.31")
     sim.set("trans_epsilon", "5")
     sim.set("intensity_filename", "Intensity vector.rpi")
     sim.set("intensity_folder", "IntensityAnimation")
@@ -219,9 +216,8 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     atm.set("temperature", _f(20.0))
 
     mats = ET.SubElement(root, "surface_absorption_enum")
-    # Cube faces use idMat=0 only. Low absorb so particles live long enough
-    # for punctual hits on the smoke path.
-    for mat_id, absorb in ((0, 0.05),):
+    # Cube faces use idMat=0 only. Absorb=0 matches upstream mat id 0.
+    for mat_id, absorb in ((0, 0.0),):
         ts = ET.SubElement(mats, "type_surface")
         ts.set("id", str(mat_id))
         ts.set("resistivite", _f(100.0))

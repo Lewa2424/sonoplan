@@ -20,6 +20,17 @@
 
 **Влияние:** ненулевая энергия / конечный `lpDb` на punctual receivers при том же fixture; численные значения — честный SPPS, не подделка дБ.
 
+## `0002-spps-link-all-tetras-within-rayon.patch`
+
+**Pinned commit:** `929a5c8e5f590b189f29155faeff8670f3699479`  
+**Файл:** `src/spps/sppsInitialisation.cpp` — `ExpandPunctualReceiverTetrahedronLocalisation`.
+
+**Симптом:** после колокации `r_near` с источником CI всё ещё даёт `ABS_SURF≈20k` и `energy_sum=0` на всех punctual `.recp`.
+
+**Причина:** upstream `RecursiveTetraTest` не гарантирует `linkedRecepteurP` на стартовом тетраэдре частицы для 6-тетраэдрного cube smoke.
+
+**Исправление:** после upstream expand дополнительно линкуем каждый тетраэдр, чей центроид в пределах `rayon+10` м от приёмника.
+
 ## Планируемый патч: код возврата SPPS (ENG-009)
 
 **Факт:** `main` в `sppsNantes.cpp` всегда `return 0` после `MainProcess` — процесс может завершиться с 0 при сбое.

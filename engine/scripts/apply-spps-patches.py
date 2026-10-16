@@ -84,6 +84,47 @@ _NEW_FPT = """void CalculationCore::FreeParticleTranslation(CONF_PARTICULE &conf
 }"""
 
 
+_OLD_EXPAND_END = """			for(int idVoisin=0;idVoisin<4;idVoisin++)
+			{
+				RecursiveTetraTest(lstRecepteurP->at(idrecp), rayonRecepteurP, recpTetra->voisins[idVoisin], tetraMesh);
+			}
+		}
+	}
+}
+
+bool CheckSourcePosition(std::vector<t_Source *> &lstSource, t_Mesh *model) {"""
+
+_NEW_EXPAND_END = """			for(int idVoisin=0;idVoisin<4;idVoisin++)
+			{
+				RecursiveTetraTest(lstRecepteurP->at(idrecp), rayonRecepteurP, recpTetra->voisins[idVoisin], tetraMesh);
+			}
+		}
+	}
+	// SonoPlan: ensure every tetra that can intersect the receiver sphere is
+	// linked. Upstream RecursiveTetraTest alone left CI minimal_room with
+	// wall hits but zero punctual .recp energy on the 6-tetra cube.
+	for(std::size_t idrecp=0;idrecp<lstRecepteurP->size();idrecp++)
+	{
+		t_Recepteur_P* rp=lstRecepteurP->at(idrecp);
+		for(uentier idtetra=0;idtetra<tetraMesh->tetraedresSize;idtetra++)
+		{
+			t_Tetra* tet=&tetraMesh->tetraedres[idtetra];
+			decimal dCenter=rp->position.distance(tet->g);
+			// Conservative: tetra diameter of a 5 m cube cell << 10 m.
+			if(dCenter<=rayonRecepteurP+10.f)
+			{
+				if(!tet->linkedRecepteurP)
+					tet->makeTabRecp();
+				if(!ContainsRP(rp,tet->linkedRecepteurP))
+					tet->linkedRecepteurP->push_back(rp);
+			}
+		}
+	}
+}
+
+bool CheckSourcePosition(std::vector<t_Source *> &lstSource, t_Mesh *model) {"""
+
+
 def _apply_deposit_fix(src: Path) -> None:
     target = src / "src" / "spps" / "CalculationCore.cpp"
     text = target.read_text(encoding="utf-8", errors="replace")
@@ -97,6 +138,21 @@ def _apply_deposit_fix(src: Path) -> None:
         )
     target.write_text(text.replace(_OLD_FPT, _NEW_FPT, 1), encoding="utf-8", newline="\n")
     print(f"deposit-on-start-tetra: applied string replace in {target}")
+
+
+def _apply_link_all_tetras(src: Path) -> None:
+    target = src / "src" / "spps" / "sppsInitialisation.cpp"
+    text = target.read_text(encoding="utf-8", errors="replace")
+    if "SonoPlan: ensure every tetra that can intersect" in text:
+        print(f"link-all-tetras-within-rayon: already applied in {target}")
+        return
+    if _OLD_EXPAND_END not in text:
+        raise SystemExit(
+            f"link-all-tetras-within-rayon: expected ExpandPunctual fragment "
+            f"not found in {target} (pinned commit mismatch?)"
+        )
+    target.write_text(text.replace(_OLD_EXPAND_END, _NEW_EXPAND_END, 1), encoding="utf-8", newline="\n")
+    print(f"link-all-tetras-within-rayon: applied string replace in {target}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -126,8 +182,9 @@ def main(argv: list[str] | None = None) -> int:
             if r.stderr:
                 print(r.stderr[:500])
 
-    # Always ensure the deposit fix is present (idempotent).
+    # Always ensure string-replace fixes are present (idempotent).
     _apply_deposit_fix(src)
+    _apply_link_all_tetras(src)
     return 0
 
 
