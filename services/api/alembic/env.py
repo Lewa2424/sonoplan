@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
+
+# services/api/.env before DATABASE_URL — does not override existing env
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 from sonoplan_api.db import Base
 from sonoplan_api import models  # noqa: F401 — register metadata

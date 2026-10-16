@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# services/api/.env — does not override already-exported variables
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 
 def get_database_url() -> str:
