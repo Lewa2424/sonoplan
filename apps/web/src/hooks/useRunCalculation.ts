@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, NetworkError } from "../api/client";
 import { createJob, getJob, newIdempotencyKey } from "../api/jobsApi";
 import type { JobResponse, ResultManifestStub } from "../api/types";
@@ -17,6 +17,8 @@ function confirmedPunctual(manifest: ResultManifestStub | null | undefined) {
 export function useRunCalculation() {
   const connectionMode = useEditorStore((s) => s.connectionMode);
   const commitRevision = useEditorStore((s) => s.commitRevision);
+  const lastCalcJobId = useEditorStore((s) => s.lastCalcJobId);
+  const setLastCalcJobId = useEditorStore((s) => s.setLastCalcJobId);
   const applyPunctualLpToWorkplaces = useEditorStore(
     (s) => s.applyPunctualLpToWorkplaces,
   );
@@ -29,6 +31,7 @@ export function useRunCalculation() {
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const appliedJobIdRef = useRef<string | null>(null);
+  const restoredRef = useRef(false);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current !== null) {
@@ -127,11 +130,38 @@ export function useRunCalculation() {
     [refreshJob, stopPoll],
   );
 
+  useEffect(() => () => stopPoll(), [stopPoll]);
+
+  useEffect(() => {
+    if (restoredRef.current) return;
+    if (!lastCalcJobId || connectionMode === "offline") return;
+    restoredRef.current = true;
+    void (async () => {
+      try {
+        const next = await getJob(lastCalcJobId);
+        setJob(next);
+        applyFromJob(next);
+        if (!TERMINAL.has(next.status)) {
+          startPoll(next.id);
+        }
+      } catch {
+        setLastCalcJobId(null);
+      }
+    })();
+  }, [
+    applyFromJob,
+    connectionMode,
+    lastCalcJobId,
+    setLastCalcJobId,
+    startPoll,
+  ]);
+
   const runJobForRevision = async (revisionId: string, snapshotHash: string) => {
     const created = await createJob(
       { revisionId, snapshotHash },
       newIdempotencyKey(),
     );
+    setLastCalcJobId(created.id);
     setJob(created);
     applyFromJob(created);
     if (!TERMINAL.has(created.status)) {

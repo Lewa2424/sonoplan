@@ -291,15 +291,25 @@ def decode_spps_workdir(work_dir: Path) -> DecodedWorkdir:
 
     surface: dict[str, Any] | None = None
     csbin_candidates = [
+        work / "recepteurss" / "Global" / "rs_cut.csbin",
         work / "recepteurss" / "rs_cut.csbin",
         work / "rs_cut.csbin",
+        work / "recepteurss" / "Global" / "Sound_level.csbin",
         work / "recepteurss" / "Sound_level.csbin",
         work / "Sound_level.csbin",
+        # Legacy bug: folder without trailing slash → recepteurssGlobal/
+        work / "recepteurssGlobal" / "rs_cut.csbin",
+        work / "recepteurssGlobal" / "Sound_level.csbin",
     ]
-    # Also accept Global/ layout from SauveGlobalRecepteursSurfaciques
-    global_dir = work / "recepteurss" / "Global"
-    if global_dir.is_dir():
-        csbin_candidates.extend(sorted(global_dir.glob("*.csbin")))
+    for extra_dir in (
+        work / "recepteurss" / "Global",
+        work / "recepteurssGlobal",
+        work / "recepteurss",
+    ):
+        if extra_dir.is_dir():
+            for found in sorted(extra_dir.glob("*.csbin")):
+                if found not in csbin_candidates:
+                    csbin_candidates.append(found)
     for csbin in csbin_candidates:
         if not csbin.is_file():
             continue

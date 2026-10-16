@@ -155,7 +155,7 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     root.set("workingdirectory", "./")
 
     sim = ET.SubElement(root, "simulation")
-    sim.set("recepteurss_directory", "recepteurss")
+    sim.set("recepteurss_directory", "recepteurss/")
     sim.set("recepteurss_filename", "Sound_level.csbin")
     sim.set("recepteurss_cut_filename", "rs_cut.csbin")
     sim.set("receiversp_directory", "Punctual receivers")
@@ -192,7 +192,7 @@ def build_config(*, nb_particles: int, seed: int) -> ET.ElementTree:
     sim.set("intensity_folder", "IntensityAnimation")
     sim.set("intensity_rp_filename", "ponct_intensity.gabe")
     sim.set("stats_filename", "statsSPPS.gabe")
-    sim.set("particules_directory", "particles")
+    sim.set("particules_directory", "particles/")
     sim.set("particules_filename", "particles.pbin")
     sim.set("directivities_directory", "")
 

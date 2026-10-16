@@ -238,7 +238,9 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
     root.set("workingdirectory", "./")
     sim = ET.SubElement(root, "simulation")
     for k, v in {
-        "recepteurss_directory": "recepteurss",
+        # Trailing slash required: SPPS concatenates folder+"Global/"+file
+        # without an extra separator (upstream configs use recepteurss\).
+        "recepteurss_directory": "recepteurss/",
         "recepteurss_filename": "Sound_level.csbin",
         "recepteurss_cut_filename": "rs_cut.csbin",
         "receiversp_directory": "Punctual receivers",
@@ -266,7 +268,7 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
         "intensity_folder": "IntensityAnimation",
         "intensity_rp_filename": "ponct_intensity.gabe",
         "stats_filename": "statsSPPS.gabe",
-        "particules_directory": "particles",
+        "particules_directory": "particles/",
         "particules_filename": "particles.pbin",
         "directivities_directory": "",
     }.items():

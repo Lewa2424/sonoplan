@@ -108,6 +108,8 @@ class ExportRevisionTests(unittest.TestCase):
             self.assertIn("RM-1", cfg)
             self.assertIn("recepteur_surfacique_coupe", cfg)
             self.assertIn('name="plan_coupe"', cfg)
+            # SPPS joins folder+"Global/" without extra sep — trailing slash required
+            self.assertIn('recepteurss_directory="recepteurss/"', cfg)
             # In-place scale must preserve non-coordinate fixture bytes
             orig = (fixture / "mesh.cbin").read_bytes()
             scaled = (out / "mesh.cbin").read_bytes()

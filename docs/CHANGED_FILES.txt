@@ -194,3 +194,4 @@ apps/web/src/model/lpPalette.ts
 apps/web/src/hooks/useRunCalculation.ts
 engine/adapter/sonoplan_adapter/rsbin_io.py
 engine/adapter/tests/test_rsbin_io.py
+engine/adapter/tests/test_csbin_path_slash.py

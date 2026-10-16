@@ -247,6 +247,18 @@ jobs:
             --snapshot-hash "$SNAP" \
             --manifest-out "$OUT/result_manifest.json" \
             | tee "$OUT/decode_outputs.json" || true
+          # Diagnostics: surface map path (rs_cut.csbin under recepteurss/Global/)
+          mkdir -p "$OUT/workdir_probe"
+          cp -a "$WORK/config.xml" "$OUT/workdir_probe/config.xml" 2>/dev/null || true
+          if [ -d "$WORK/recepteurss" ]; then
+            find "$WORK/recepteurss" -type f | tee "$OUT/workdir_probe/recepteurss_listing.txt" || true
+            cp -a "$WORK/recepteurss" "$OUT/workdir_probe/recepteurss" 2>/dev/null || true
+          fi
+          if [ -d "$WORK/recepteurssGlobal" ]; then
+            echo "legacy_path_recepteurssGlobal_present" | tee -a "$OUT/workdir_probe/recepteurss_listing.txt"
+            find "$WORK/recepteurssGlobal" -type f | tee -a "$OUT/workdir_probe/recepteurss_listing.txt" || true
+            cp -a "$WORK/recepteurssGlobal" "$OUT/workdir_probe/recepteurssGlobal" 2>/dev/null || true
+          fi
           python3 <<PY
           import json
           from pathlib import Path

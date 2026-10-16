@@ -96,6 +96,8 @@ interface EditorState {
   polygonDraft: FloorVertex[];
   validationIssues: ValidationIssue[];
   lastRevision: LastRevisionInfo | null;
+  /** Last calculation job id — survives tab unmount (Расчёты). */
+  lastCalcJobId: string | null;
   planLpOverlay: PlanLpOverlay | null;
   planSurfaceMap: PlanSurfaceMapOverlay | null;
   pendingEquipmentKey: string | null;
@@ -139,6 +141,7 @@ interface EditorState {
   saveDraft: () => Promise<void>;
   reloadDraft: () => Promise<void>;
   markDirty: () => void;
+  setLastCalcJobId: (jobId: string | null) => void;
   setPlanLpOverlay: (overlay: PlanLpOverlay | null) => void;
   setPlanSurfaceMap: (overlay: PlanSurfaceMapOverlay | null) => void;
   /**
@@ -230,6 +233,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   polygonDraft: [],
   validationIssues: [],
   lastRevision: null,
+  lastCalcJobId: null,
   planLpOverlay: null,
   planSurfaceMap: null,
   pendingEquipmentKey: null,
@@ -253,6 +257,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       polygonDraft: [],
       validationIssues: [],
       lastRevision: null,
+      lastCalcJobId: null,
       planLpOverlay: null,
       planSurfaceMap: null,
       pendingEquipmentKey: null,
@@ -280,6 +285,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       polygonDraft: [],
       validationIssues: [],
       lastRevision: null,
+      lastCalcJobId: null,
       planLpOverlay: null,
       planSurfaceMap: null,
       pendingEquipmentKey: null,
@@ -315,6 +321,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         polygonDraft: [],
         validationIssues: [],
         lastRevision: null,
+        lastCalcJobId: null,
         planLpOverlay: null,
         planSurfaceMap: null,
         pendingEquipmentKey: null,
@@ -854,6 +861,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
   },
 
+  setLastCalcJobId: (jobId) => set({ lastCalcJobId: jobId }),
   setPlanLpOverlay: (overlay) => set({ planLpOverlay: overlay }),
   setPlanSurfaceMap: (overlay) => set({ planSurfaceMap: overlay }),
 

@@ -41,12 +41,15 @@ export function CalculationsPage() {
   );
   const planLpOverlay = useEditorStore((s) => s.planLpOverlay);
   const isPlanResultStale = useEditorStore((s) => s.isPlanResultStale);
+  const lastCalcJobId = useEditorStore((s) => s.lastCalcJobId);
+  const setLastCalcJobId = useEditorStore((s) => s.setLastCalcJobId);
 
   const [job, setJob] = useState<JobResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const appliedJobIdRef = useRef<string | null>(null);
+  const restoredRef = useRef(false);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current !== null) {
@@ -149,6 +152,31 @@ export function CalculationsPage() {
     [refreshJob, stopPoll],
   );
 
+  // Restore last job when returning to the tab (local useState is cleared on unmount).
+  useEffect(() => {
+    if (restoredRef.current) return;
+    if (!lastCalcJobId || connectionMode === "offline") return;
+    restoredRef.current = true;
+    void (async () => {
+      try {
+        const next = await getJob(lastCalcJobId);
+        setJob(next);
+        applyLevelsFromJob(next);
+        if (!TERMINAL.has(next.status)) {
+          startPoll(next.id);
+        }
+      } catch {
+        setLastCalcJobId(null);
+      }
+    })();
+  }, [
+    applyLevelsFromJob,
+    connectionMode,
+    lastCalcJobId,
+    setLastCalcJobId,
+    startPoll,
+  ]);
+
   const onCommitRevision = async () => {
     if (connectionMode === "offline") {
       setError(ru.calculations.offlineBlocked);
@@ -176,6 +204,7 @@ export function CalculationsPage() {
       { revisionId, snapshotHash },
       newIdempotencyKey(),
     );
+    setLastCalcJobId(created.id);
     setJob(created);
     applyLevelsFromJob(created);
     if (!TERMINAL.has(created.status)) {
