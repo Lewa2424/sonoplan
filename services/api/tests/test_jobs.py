@@ -92,8 +92,20 @@ def test_job_idempotency_returns_same_job(client) -> None:
     assert job1["revisionId"] == rev["revisionId"]
     assert job1["snapshotHash"] == rev["snapshotHash"]
     assert job1["status"] in ("failed", "completed", "cancelled", "running", "queued")
-    # On Windows / without SPPS_BIN inline executor fails with a clear code.
-    if job1["status"] == "failed":
+    manifest = job1.get("resultManifest")
+    # Must never publish a fake heatmap.
+    if manifest is not None:
+        assert manifest.get("mapAvailable") is False
+    if job1["status"] == "completed":
+        # Windows MVP: fixture_replay decodes real CI .recp (nonzero energy → lpDb).
+        assert manifest is not None
+        punctual = manifest.get("punctualReceivers") or []
+        assert punctual, "completed job must carry punctualReceivers"
+        assert any(p.get("lpDbGlobal") is not None for p in punctual)
+        if manifest.get("executionMode") == "fixture_replay":
+            notes = " ".join(manifest.get("notes") or [])
+            assert "fixture_replay" in notes
+    elif job1["status"] == "failed":
         assert job1["errorCode"] in (
             "SPPS_NOT_LINUX",
             "SPPS_BIN_MISSING",
@@ -101,13 +113,9 @@ def test_job_idempotency_returns_same_job(client) -> None:
             "SPPS_NOT_ELF",
             "FIXTURE_INPUTS_MISSING",
             "SPPS_RUN_FAILED",
+            "FIXTURE_REPLAY_UNAVAILABLE",
         )
         assert job1["errorMessage"]
-        # Must not publish a fake heatmap.
-        manifest = job1.get("resultManifest")
-        if manifest is not None:
-            assert manifest.get("mapAvailable") is False
-            assert manifest.get("quantity") is None
 
     second = client.post("/api/v1/jobs", headers=headers, json=body)
     assert second.status_code == 200

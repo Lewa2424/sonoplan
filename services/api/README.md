@@ -16,8 +16,15 @@ FastAPI `/api/v1` — STG-04: проекты, draft с ETag, ревизии, val
 
 Состояния job: `created` → `queued` → `running` → `completed` | `failed` | `cancelled`.
 
-По умолчанию `SONOPLAN_JOBS_INLINE=1` (без RabbitMQ): исполнение в процессе API через `engine/adapter`.  
-На Windows ожидаем `failed` с `SPPS_NOT_LINUX` (или `SPPS_BIN_MISSING`). Фейковая теплокарта не публикуется.
+Бэкенд исполнения (`SONOPLAN_JOBS_BACKEND`):
+
+| Значение | Поведение |
+|----------|-----------|
+| `inline` (default) | В процессе API через `engine/adapter`. На Windows — `fixture_replay` (decode pinned CI `.recp`), не живой SPPS. |
+| `github_actions` | `workflow_dispatch` → Linux SPPS на GitHub-hosted runner; результат через artifact на `GET /jobs/{id}`. См. [`docs/github-actions-worker.md`](../../docs/github-actions-worker.md). |
+| `celery` | RabbitMQ worker (`SONOPLAN_JOBS_INLINE=0` без явного backend). |
+
+Фейковая теплокарта не публикуется.
 
 ## База данных
 

@@ -2,7 +2,6 @@ import { useEditorStore } from "../store/editorStore";
 
 export function EditorToolbar() {
   const toolMode = useEditorStore((s) => s.toolMode);
-  const setToolMode = useEditorStore((s) => s.setToolMode);
   const applyRectangleRoom = useEditorStore((s) => s.applyRectangleRoom);
   const applyLShapeRoom = useEditorStore((s) => s.applyLShapeRoom);
   const beginPolygon = useEditorStore((s) => s.beginPolygon);
@@ -18,22 +17,6 @@ export function EditorToolbar() {
 
   return (
     <div className="editor-toolbar" role="toolbar" aria-label="Инструменты модели">
-      <div className="toolbar-row">
-        <button
-          type="button"
-          className={toolMode === "select" ? "btn btn--active" : "btn"}
-          onClick={() => setToolMode("select")}
-        >
-          Выбор
-        </button>
-        <button
-          type="button"
-          className={toolMode === "move" ? "btn btn--active" : "btn"}
-          onClick={() => setToolMode("move")}
-        >
-          Переместить
-        </button>
-      </div>
       <div className="toolbar-row">
         <button type="button" className="btn" onClick={applyRectangleRoom}>
           □ Прямоуг.
@@ -60,8 +43,6 @@ export function EditorToolbar() {
             Многоуг.
           </button>
         )}
-      </div>
-      <div className="toolbar-row">
         <button type="button" className="btn btn--accent" onClick={() => void runValidate()}>
           Проверить
         </button>

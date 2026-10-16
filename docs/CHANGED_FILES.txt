@@ -171,3 +171,16 @@ engine/scripts/build-spps-native.sh
 CODE_MAP.md
 README.md
 apps/web/src/styles.css
+engine/adapter/sonoplan_adapter/fixture_replay.py
+engine/adapter/tests/test_fixture_replay.py
+engine/fixtures/minimal_room/expected/result_manifest.ci.json
+engine/fixtures/minimal_room/expected/Punctual receivers/r_back/Sound level.recp
+engine/fixtures/minimal_room/expected/Punctual receivers/r_bot/Sound level.recp
+engine/fixtures/minimal_room/expected/Punctual receivers/r_left/Sound level.recp
+engine/fixtures/minimal_room/expected/Punctual receivers/r_near/Sound level.recp
+engine/fixtures/minimal_room/expected/Punctual receivers/r_right/Sound level.recp
+engine/fixtures/minimal_room/expected/Punctual receivers/r_top/Sound level.recp
+.github/workflows/run-spps-product-job.yml
+docs/github-actions-worker.md
+services/api/src/sonoplan_api/github_actions_jobs.py
+services/api/tests/test_github_actions_jobs.py

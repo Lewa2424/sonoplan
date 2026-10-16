@@ -1,3 +1,7 @@
+import {
+  contourVertexAngles,
+  formatAngleDeg,
+} from "../model/contourHelpers";
 import { useEditorStore } from "../store/editorStore";
 import { STANDARD_BANDS_HZ } from "../model/factoryModel";
 
@@ -9,6 +13,7 @@ export function PropertiesPanel() {
   const roomWidthM = useEditorStore((s) => s.roomWidthM);
   const roomDepthM = useEditorStore((s) => s.roomDepthM);
   const applyRectangleRoom = useEditorStore((s) => s.applyRectangleRoom);
+  const snapRoomRightAngles = useEditorStore((s) => s.snapRoomRightAngles);
   const updateSelectedName = useEditorStore((s) => s.updateSelectedName);
   const updateSourceLw = useEditorStore((s) => s.updateSourceLw);
   const updateSourcePosition = useEditorStore((s) => s.updateSourcePosition);
@@ -27,6 +32,7 @@ export function PropertiesPanel() {
 
   if (selection.kind === "room") {
     const room = model.rooms.find((r) => r.id === selection.id);
+    const angles = room ? contourVertexAngles(room.floorContour) : [];
     return (
       <aside className="props-panel" aria-label="Свойства помещения">
         <h3 className="props-title">Помещение</h3>
@@ -89,9 +95,22 @@ export function PropertiesPanel() {
         <button type="button" className="btn" onClick={applyRectangleRoom}>
           Применить прямоугольник
         </button>
+        <button type="button" className="btn" onClick={snapRoomRightAngles}>
+          Выровнять 90±5°
+        </button>
         <p className="props-meta">
           Вершин контура: {room?.floorContour.length ?? 0} (замкнутый)
         </p>
+        {angles.length > 0 ? (
+          <ul className="props-angles" aria-label="Углы контура">
+            {angles.map((a) => (
+              <li key={a.index}>
+                ∠{a.index + 1}: {formatAngleDeg(a.degrees)}
+                {a.nearRightAngle ? " ≈90°" : ""}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </aside>
     );
   }

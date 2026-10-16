@@ -56,6 +56,20 @@ export interface JobCreate {
   readonly snapshotHash?: string;
 }
 
+export interface PunctualReceiverSummary {
+  readonly receiverId?: string;
+  readonly relativePath?: string;
+  readonly energySumGlobal?: number;
+  readonly lpDbGlobal?: number | null;
+  readonly lpDbGlobalReason?: string | null;
+  readonly bandLabels?: readonly string[];
+  readonly bands?: readonly {
+    readonly label?: string;
+    readonly energySum?: number;
+    readonly lpDb?: number | null;
+  }[];
+}
+
 export interface ResultManifestStub {
   readonly schemaVersion?: string;
   readonly jobId?: string;
@@ -63,9 +77,13 @@ export interface ResultManifestStub {
   readonly snapshotHash?: string;
   readonly quantity?: string | null;
   readonly unit?: string | null;
+  readonly displayQuantity?: string | null;
+  readonly displayUnit?: string | null;
   readonly artifactPaths?: readonly string[];
   readonly mapAvailable?: boolean;
   readonly mapDeferredReason?: string | null;
+  readonly punctualReceivers?: readonly PunctualReceiverSummary[];
+  readonly executionMode?: string | null;
   readonly notes?: readonly string[];
   readonly attempt?: {
     readonly ok?: boolean;

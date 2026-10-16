@@ -102,6 +102,11 @@ body {
   margin: 0 0 8px;
 }
 
+.page-banner--ok {
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--border));
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
 .page-banner {
   margin: 0 0 12px;
   padding: 12px 14px;
@@ -345,20 +350,30 @@ body {
 }
 
 .plan-wrap {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
+  min-height: 0;
 }
 
 .plan-place-bar {
-  position: absolute;
-  z-index: 2;
-  top: 8px;
-  left: 8px;
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.plan-place-sep {
+  width: 1px;
+  align-self: stretch;
+  min-height: 28px;
+  background: var(--border);
+  margin: 0 2px;
 }
 
 .plan-place-hint {
@@ -367,6 +382,13 @@ body {
   background: var(--surface);
   padding: 4px 8px;
   border-radius: 6px;
+}
+
+.plan-stage-host {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  width: 100%;
 }
 
 .plan-stage {
@@ -395,6 +417,15 @@ body {
   font-size: 0.8rem;
   color: var(--accent);
   font-family: ui-monospace, monospace;
+}
+
+.props-angles {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  max-height: 9rem;
+  overflow-y: auto;
 }
 
 .props-meta {
@@ -537,4 +568,34 @@ body {
   padding-left: 1.2rem;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.calc-levels {
+  margin-top: 14px;
+}
+
+.calc-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.calc-table th,
+.calc-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.calc-table th {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 650;
 }

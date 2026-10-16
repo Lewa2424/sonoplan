@@ -1,5 +1,6 @@
 import {
   isUuid,
+  stripClosingDuplicate,
   validateModel,
   type FloorVertex,
   type ModelSnapshot,
@@ -23,9 +24,11 @@ import {
   parseDraftBody,
 } from "../model/factoryModel";
 import {
+  contourVertexAngles,
   ensureClosedContour,
   lShapeContour,
   rectangleContour,
+  snapNearRightAngles,
 } from "../model/contourHelpers";
 
 export type ConnectionMode = "online" | "offline";
@@ -51,6 +54,14 @@ interface LastRevisionInfo {
   snapshotHash: string;
 }
 
+/** Lp (dB) shown on plan at workplaces after a completed job. */
+export interface PlanLpOverlay {
+  readonly byWorkplaceId: Readonly<Record<string, number>>;
+  readonly jobId: string;
+  readonly revisionId: string;
+  readonly fixtureReplay: boolean;
+}
+
 interface EditorState {
   connectionMode: ConnectionMode;
   projectId: string | null;
@@ -64,6 +75,7 @@ interface EditorState {
   polygonDraft: FloorVertex[];
   validationIssues: ValidationIssue[];
   lastRevision: LastRevisionInfo | null;
+  planLpOverlay: PlanLpOverlay | null;
   roomWidthM: number;
   roomDepthM: number;
   roomHeightM: number;
@@ -76,10 +88,13 @@ interface EditorState {
   setRoomDimensions: (w: number, d: number, h: number) => void;
   applyRectangleRoom: () => void;
   applyLShapeRoom: () => void;
+  snapRoomRightAngles: () => void;
   beginPolygon: () => void;
   addPolygonVertex: (x: number, y: number) => void;
+  updatePolygonDraftVertex: (index: number, x: number, y: number) => void;
   finishPolygon: () => void;
   cancelPolygon: () => void;
+  updateRoomVertex: (index: number, x: number, y: number) => void;
   addSource: (x: number, y: number) => void;
   addWorkplace: (x: number, y: number) => void;
   updateSelectedName: (name: string) => void;
@@ -92,6 +107,19 @@ interface EditorState {
   saveDraft: () => Promise<void>;
   reloadDraft: () => Promise<void>;
   markDirty: () => void;
+  setPlanLpOverlay: (overlay: PlanLpOverlay | null) => void;
+  /**
+   * Map punctual receivers (order) → workplaces (order).
+   * Honest for fixture_replay: same numbers as CI table, assigned by index.
+   */
+  applyPunctualLpToWorkplaces: (args: {
+    jobId: string;
+    revisionId: string;
+    fixtureReplay: boolean;
+    punctual: readonly {
+      lpDbGlobal?: number | null;
+    }[];
+  }) => void;
 }
 
 const initialModel = createOfflineDraft("Новый цех").model;
@@ -153,6 +181,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   polygonDraft: [],
   validationIssues: [],
   lastRevision: null,
+  planLpOverlay: null,
   roomWidthM: 20,
   roomDepthM: 12,
   roomHeightM: 6,
@@ -171,6 +200,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       polygonDraft: [],
       validationIssues: [],
       lastRevision: null,
+      planLpOverlay: null,
       roomWidthM: 20,
       roomDepthM: 12,
       roomHeightM: 6,
@@ -193,6 +223,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       polygonDraft: [],
       validationIssues: [],
       lastRevision: null,
+      planLpOverlay: null,
       roomWidthM: 20,
       roomDepthM: 12,
       roomHeightM: 6,
@@ -222,6 +253,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         polygonDraft: [],
         validationIssues: [],
         lastRevision: null,
+        planLpOverlay: null,
         roomHeightM: room?.heightM.value ?? 6,
       });
     } catch (err) {
@@ -279,11 +311,59 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().markDirty();
   },
 
+  snapRoomRightAngles: () => {
+    const { model, roomHeightM } = get();
+    const room = model.rooms[0];
+    if (!room) return;
+    const before = room.floorContour;
+    const nearRight = contourVertexAngles(before).filter(
+      (a) => a.nearRightAngle,
+    ).length;
+    const contour = snapNearRightAngles(before);
+    const changed = JSON.stringify(before) !== JSON.stringify(contour);
+    const next = withRoom(model, contour, roomHeightM);
+    set({
+      model: next,
+      selection: next.rooms[0]
+        ? { kind: "room", id: next.rooms[0].id }
+        : null,
+      syncMessage: changed
+        ? `Выровнено: стены ≈оси и углы 90±5° (${nearRight} углов)`
+        : nearRight > 0
+          ? "Углы уже в пределах 90±5° — геометрия без изменений"
+          : "Нет углов/рёбер в диапазоне 90±5°",
+    });
+    if (changed) get().markDirty();
+  },
+
   beginPolygon: () =>
     set({ toolMode: "drawPolygon", polygonDraft: [], selection: null }),
 
   addPolygonVertex: (x, y) =>
     set((s) => ({ polygonDraft: [...s.polygonDraft, { x, y }] })),
+
+  updatePolygonDraftVertex: (index, x, y) =>
+    set((s) => {
+      if (index < 0 || index >= s.polygonDraft.length) return s;
+      const polygonDraft = s.polygonDraft.map((v, i) =>
+        i === index ? { x, y } : v,
+      );
+      return { polygonDraft };
+    }),
+
+  updateRoomVertex: (index, x, y) => {
+    const { model, roomHeightM } = get();
+    const room = model.rooms[0];
+    if (!room) return;
+    const unique = stripClosingDuplicate(room.floorContour);
+    if (index < 0 || index >= unique.length) return;
+    const nextUnique = unique.map((v, i) => (i === index ? { x, y } : v));
+    // Auto-stick corners within 90±5° after each vertex move.
+    const contour = snapNearRightAngles(ensureClosedContour(nextUnique));
+    const next = withRoom(model, contour, roomHeightM);
+    set({ model: next });
+    get().markDirty();
+  },
 
   finishPolygon: () => {
     const { polygonDraft, roomHeightM, model } = get();
@@ -296,7 +376,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return;
     }
     try {
-      const contour = ensureClosedContour(polygonDraft);
+      const closed = ensureClosedContour(polygonDraft);
+      const nearRight = contourVertexAngles(closed).filter((a) => a.nearRightAngle)
+        .length;
+      const contour = snapNearRightAngles(closed);
       const next = withRoom(model, contour, roomHeightM);
       set({
         model: next,
@@ -305,7 +388,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         selection: next.rooms[0]
           ? { kind: "room", id: next.rooms[0].id }
           : null,
-        syncMessage: null,
+        syncMessage:
+          nearRight > 0
+            ? `Контур сохранён: ${nearRight} угол(а) ≈90° выровнены в 90°`
+            : "Контур сохранён",
       });
       get().markDirty();
     } catch (err) {
@@ -573,6 +659,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           revisionId: rev.revisionId,
           snapshotHash: rev.snapshotHash,
         },
+        planLpOverlay: null,
         syncMessage: `Ревизия ${rev.revisionId.slice(0, 8)}… snapshotHash=${rev.snapshotHash.slice(0, 12)}…`,
       });
     } catch (err) {
@@ -582,6 +669,37 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           err instanceof Error ? err.message : "Не удалось создать ревизию",
       });
     }
+  },
+
+  setPlanLpOverlay: (overlay) => set({ planLpOverlay: overlay }),
+
+  applyPunctualLpToWorkplaces: ({
+    jobId,
+    revisionId,
+    fixtureReplay,
+    punctual,
+  }) => {
+    const workplaces = get().model.workplaces;
+    const byWorkplaceId: Record<string, number> = {};
+    for (let i = 0; i < workplaces.length; i += 1) {
+      const wp = workplaces[i];
+      const lp = punctual[i]?.lpDbGlobal;
+      if (wp && typeof lp === "number" && Number.isFinite(lp)) {
+        byWorkplaceId[wp.id] = lp;
+      }
+    }
+    if (Object.keys(byWorkplaceId).length === 0) {
+      set({ planLpOverlay: null });
+      return;
+    }
+    set({
+      planLpOverlay: {
+        byWorkplaceId,
+        jobId,
+        revisionId,
+        fixtureReplay,
+      },
+    });
   },
 }));
 

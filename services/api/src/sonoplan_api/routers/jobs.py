@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from sonoplan_api.db import get_db
-from sonoplan_api.jobs_service import create_job
+from sonoplan_api.jobs_service import create_job, refresh_job
 from sonoplan_api.models import JobRow, RevisionRow
 from sonoplan_api.schemas import JobCreate, JobResponse
 
@@ -94,6 +94,7 @@ def get_job(job_id: str, db: Session = Depends(get_db)) -> JobResponse:
     job = db.get(JobRow, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    job = refresh_job(db, job)
     return job_to_response(job)
 
 

@@ -1,0 +1,263 @@
+# Product calculation worker (free path): GitHub-hosted Linux runs SPPS.
+# Triggered by API workflow_dispatch with jobId / revisionId / snapshotHash.
+#
+# Phase 1 honesty: workdir is still engine/fixtures/minimal_room (no model→mesh
+# export yet). This IS a live Linux SPPS process — not Windows fixture_replay.
+# Do not invent heatmaps / dB. Public repo → $0 Actions minutes on standard runners.
+
+name: Run SPPS Product Job
+
+run-name: sonoplan-job-${{ inputs.job_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: SonoPlan job UUID
+        required: true
+        type: string
+      revision_id:
+        description: Immutable revision UUID
+        required: true
+        type: string
+      snapshot_hash:
+        description: Revision snapshotHash (64 hex)
+        required: true
+        type: string
+
+concurrency:
+  group: sonoplan-product-job-${{ inputs.job_id }}
+  cancel-in-progress: true
+
+jobs:
+  run-spps:
+    name: Linux SPPS for product job
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Checkout SonoPlan
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read pin + prepare dirs
+        id: pin
+        run: |
+          mkdir -p ci-product-job/out engine/binaries/spps-ci
+          python3 <<'PY'
+          import json, os
+          from pathlib import Path
+          pin = json.loads(Path("engine/PINNED.json").read_text(encoding="utf-8"))
+          art = pin.get("binary_artifact") or {}
+          commit = pin["isimpa"]["commit"]
+          short = commit[:12]
+          artifact = art.get("artifact_name") or f"spps-linux-x86_64-{short}"
+          run_id = art.get("github_run_id") or ""
+          checksum = pin.get("binary_checksum") or ""
+          out = Path(os.environ["GITHUB_OUTPUT"])
+          with out.open("a", encoding="utf-8") as fh:
+              fh.write(f"commit={commit}\n")
+              fh.write(f"short={short}\n")
+              fh.write(f"checksum={checksum}\n")
+              fh.write(f"artifact={artifact}\n")
+              fh.write(f"run_id={run_id}\n")
+          PY
+
+      - name: Verify fixture inputs present
+        run: |
+          set -euo pipefail
+          IN="engine/fixtures/minimal_room/inputs"
+          for f in config.xml mesh.cbin tetramesh.mbin speaker-test3.txt; do
+            test -f "$IN/$f" || { echo "MISSING $IN/$f"; exit 1; }
+          done
+
+      - name: Download SPPS artifact (gh)
+        id: dl
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="${{ steps.pin.outputs.run_id }}"
+          ART="${{ steps.pin.outputs.artifact }}"
+          DEST="engine/binaries/spps-ci"
+          MARKER="sonoplan-deposit-all-recp-v3"
+          USED_LATEST=0
+          if [[ -n "$RUN_ID" ]]; then
+            gh run download "$RUN_ID" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+          fi
+          SPPS_FILE=$(find "$DEST" -type f -name spps 2>/dev/null | head -n1 || true)
+          need_latest=0
+          if [[ -z "$SPPS_FILE" ]]; then
+            need_latest=1
+          elif ! grep -a -F -q "$MARKER" "$SPPS_FILE"; then
+            need_latest=1
+            USED_LATEST=1
+            rm -rf "$DEST"
+            mkdir -p "$DEST"
+          fi
+          if [[ "$need_latest" -eq 1 ]]; then
+            LATEST=$(gh run list --repo "${{ github.repository }}" --workflow build-spps.yml --status success --limit 1 --json databaseId -q '.[0].databaseId' || true)
+            if [[ -n "$LATEST" && "$LATEST" != "null" ]]; then
+              gh run download "$LATEST" --repo "${{ github.repository }}" -n "$ART" -D "$DEST" || true
+              USED_LATEST=1
+            fi
+          fi
+          echo "used_latest=$USED_LATEST" >> "$GITHUB_OUTPUT"
+
+      - name: Locate SPPS binary
+        id: bin
+        run: |
+          set -euo pipefail
+          FOUND=$(find engine/binaries -type f -name spps 2>/dev/null | head -n1 || true)
+          if [[ -z "$FOUND" ]]; then
+            echo "found=0" >> "$GITHUB_OUTPUT"
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          chmod +x "$FOUND"
+          ABS="$(cd "$(dirname "$FOUND")" && pwd)/$(basename "$FOUND")"
+          echo "found=1" >> "$GITHUB_OUTPUT"
+          echo "path=$ABS" >> "$GITHUB_OUTPUT"
+
+      - name: Fail when binary missing
+        if: steps.bin.outputs.found != '1'
+        run: |
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+          out = Path("ci-product-job/out")
+          out.mkdir(parents=True, exist_ok=True)
+          job_id = "${{ inputs.job_id }}"
+          man = {
+            "schemaVersion": "1.0",
+            "jobId": job_id,
+            "revisionId": "${{ inputs.revision_id }}",
+            "snapshotHash": "${{ inputs.snapshot_hash }}",
+            "mapAvailable": False,
+            "mapDeferredReason": "SPPS binary missing on Actions runner",
+            "punctualReceivers": [],
+            "executionMode": "github_actions_spps",
+            "notes": [
+              "GitHub Actions worker could not download pinned SPPS binary.",
+            ],
+          }
+          (out / "result_manifest.json").write_text(json.dumps(man, indent=2), encoding="utf-8")
+          (out / "job_status.json").write_text(
+              json.dumps({
+                  "status": "failed",
+                  "errorCode": "SPPS_BIN_MISSING",
+                  "errorMessage": "Could not download SPPS artifact for product job",
+              }, indent=2),
+              encoding="utf-8",
+          )
+          PY
+          exit 1
+
+      - name: attempt-run + decode ResultManifest
+        env:
+          SPPS_BIN: ${{ steps.bin.outputs.path }}
+        working-directory: engine/adapter
+        run: |
+          set -euo pipefail
+          JOB_ID="${{ inputs.job_id }}"
+          REV_ID="${{ inputs.revision_id }}"
+          SNAP="${{ inputs.snapshot_hash }}"
+          OUT="../../ci-product-job/out"
+          mkdir -p "$OUT"
+          set +e
+          python -m sonoplan_adapter.cli attempt-run ../fixtures/minimal_room/inputs \
+            --required-input config.xml \
+            --required-input mesh.cbin \
+            --required-input tetramesh.mbin \
+            --required-input speaker-test3.txt \
+            --report "$OUT/attempt_run.json"
+          CODE=$?
+          set -e
+          echo "attempt_exit=$CODE" | tee "$OUT/attempt_exit.txt"
+          python -m sonoplan_adapter.cli decode-outputs ../fixtures/minimal_room/inputs \
+            --job-id "$JOB_ID" \
+            --revision-id "$REV_ID" \
+            --snapshot-hash "$SNAP" \
+            --manifest-out "$OUT/result_manifest.json" \
+            | tee "$OUT/decode_outputs.json" || true
+          python3 <<PY
+          import json
+          from pathlib import Path
+          out = Path("$OUT")
+          man_path = out / "result_manifest.json"
+          attempt_path = out / "attempt_run.json"
+          attempt = {}
+          if attempt_path.is_file():
+              attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+          ok = int("$CODE") == 0 and bool(attempt.get("ok"))
+          if man_path.is_file():
+              man = json.loads(man_path.read_text(encoding="utf-8"))
+          else:
+              man = {
+                  "schemaVersion": "1.0",
+                  "jobId": "$JOB_ID",
+                  "revisionId": "$REV_ID",
+                  "snapshotHash": "$SNAP",
+                  "mapAvailable": False,
+                  "punctualReceivers": [],
+              }
+          notes = list(man.get("notes") or [])
+          phase = (
+              "GitHub Actions Linux SPPS (free worker). "
+              "Phase 1: geometry is still engine/fixtures/minimal_room — "
+              "not yet exported from this revision's mesh. "
+              "Live SPPS process on ubuntu-22.04; not Windows fixture_replay decode."
+          )
+          if phase not in notes:
+              notes.insert(0, phase)
+          man["notes"] = notes
+          man["executionMode"] = "github_actions_spps"
+          man["mapAvailable"] = False
+          man_path.write_text(json.dumps(man, indent=2), encoding="utf-8")
+          punctual = man.get("punctualReceivers") or []
+          any_lp = any(p.get("lpDbGlobal") is not None for p in punctual)
+          if ok and any_lp:
+              status = {
+                  "status": "completed",
+                  "errorCode": None,
+                  "errorMessage": None,
+              }
+          elif ok and not any_lp:
+              status = {
+                  "status": "failed",
+                  "errorCode": "SPPS_ZERO_ENERGY",
+                  "errorMessage": (
+                      "SPPS exit ok but no confirmed Lp "
+                      "(zero energy ≠ 0 dB; map not published)."
+                  ),
+              }
+          else:
+              status = {
+                  "status": "failed",
+                  "errorCode": attempt.get("error_code") or "SPPS_RUN_FAILED",
+                  "errorMessage": attempt.get("error_message")
+                  or ("attempt_exit=" + str($CODE)),
+              }
+          (out / "job_status.json").write_text(
+              json.dumps(status, indent=2), encoding="utf-8"
+          )
+          print("product job_status", status)
+          if status["status"] != "completed":
+              raise SystemExit(1)
+          PY
+
+      - name: Upload product job artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonoplan-job-${{ inputs.job_id }}
+          path: ci-product-job/out/
+          if-no-files-found: warn
+          retention-days: 14

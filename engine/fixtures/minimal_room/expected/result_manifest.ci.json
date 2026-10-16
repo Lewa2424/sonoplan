@@ -1,0 +1,703 @@
+{
+  "schemaVersion": "1.0",
+  "jobId": "ci-38888407006",
+  "revisionId": "fixture-minimal_room",
+  "snapshotHash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "quantity": "energy_p2_homogeneous",
+  "unit": "Pa2_homogeneous",
+  "displayQuantity": "Lp_dB",
+  "displayUnit": "dB",
+  "grid": null,
+  "masks": null,
+  "artifactPaths": [
+    "Punctual receivers/r_back/Sound level.recp",
+    "Punctual receivers/r_bot/Sound level.recp",
+    "Punctual receivers/r_front/Sound level.recp",
+    "Punctual receivers/r_left/Sound level.recp",
+    "Punctual receivers/r_near/Sound level.recp",
+    "Punctual receivers/r_right/Sound level.recp",
+    "Punctual receivers/r_top/Sound level.recp"
+  ],
+  "mapAvailable": false,
+  "mapDeferredReason": "Punctual .recp decoded (energy p^2-homogeneous). Surface heatmap deferred until .csbin decode — not published from punctual files.",
+  "punctualReceivers": [
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_back/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.006976837186584817,
+          "lp_db": 72.41598596952481,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 1000
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06420515208810684,
+          "lp_db": 82.05509887732458,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 1000
+        }
+      ],
+      "energySumGlobal": 0.07118198927469166,
+      "lpDbGlobal": 82.50310129442276,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_back",
+      "relativePath": "Punctual receivers/r_back/Sound level.recp"
+    },
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_bot/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.006952921988158778,
+          "lp_db": 72.40107365297372,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 1000
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06438427860484808,
+          "lp_db": 82.06719842667061,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 1000
+        }
+      ],
+      "energySumGlobal": 0.07133720059300686,
+      "lpDbGlobal": 82.51256071469945,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_bot",
+      "relativePath": "Punctual receivers/r_bot/Sound level.recp"
+    },
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_front/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.006931244428415084,
+          "lp_db": 72.38751223063804,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 994
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06436186402788735,
+          "lp_db": 82.06568622180178,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 994
+        }
+      ],
+      "energySumGlobal": 0.07129310845630243,
+      "lpDbGlobal": 82.50987559504938,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_front",
+      "relativePath": "Punctual receivers/r_front/Sound level.recp"
+    },
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_left/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.006982273651487958,
+          "lp_db": 72.41936874491108,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 994
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06442225391219836,
+          "lp_db": 82.06975923885713,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 994
+        }
+      ],
+      "energySumGlobal": 0.07140452756368632,
+      "lpDbGlobal": 82.51665758733722,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_left",
+      "relativePath": "Punctual receivers/r_left/Sound level.recp"
+    },
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_near/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.007439031961553155,
+          "lp_db": 72.6945643331621,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 989
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06891426352194685,
+          "lp_db": 82.36249127934812,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 989
+        }
+      ],
+      "energySumGlobal": 0.0763532954835,
+      "lpDbGlobal": 82.80767795046961,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_near",
+      "relativePath": "Punctual receivers/r_near/Sound level.recp"
+    },
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_right/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.0069758560521222535,
+          "lp_db": 72.41537518954634,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 1000
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06435916985901713,
+          "lp_db": 82.06550442359236,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 1000
+        }
+      ],
+      "energySumGlobal": 0.07133502591113938,
+      "lpDbGlobal": 82.51242831999892,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_right",
+      "relativePath": "Punctual receivers/r_right/Sound level.recp"
+    },
+    {
+      "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_top/Sound level.recp",
+      "formatVersion": 2,
+      "quantityInFile": "energy_p2_homogeneous",
+      "unitInFile": "Pa2_homogeneous",
+      "displayQuantity": "Lp_dB",
+      "displayUnit": "dB",
+      "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+      "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+      "bandLabels": [
+        "100 Hz",
+        "1000 Hz"
+      ],
+      "timestepCount": 1000,
+      "bandCount": 2,
+      "bands": [
+        {
+          "band_label": "100 Hz",
+          "energy_sum": 0.006942180935766373,
+          "lp_db": 72.39435937278662,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 994
+        },
+        {
+          "band_label": "1000 Hz",
+          "energy_sum": 0.06357272583227314,
+          "lp_db": 82.01210841913648,
+          "lp_db_reason": null,
+          "nonzero_timesteps": 994
+        }
+      ],
+      "energySumGlobal": 0.07051490676803951,
+      "lpDbGlobal": 82.46220944709735,
+      "lpDbGlobalReason": null,
+      "notes": [
+        "Disk values are p^2-homogeneous energy, not SPL.",
+        "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+        "A-weighting is not applied here; apply once to unweighted bands only."
+      ],
+      "receiverId": "r_top",
+      "relativePath": "Punctual receivers/r_top/Sound level.recp"
+    }
+  ],
+  "decode": {
+    "ok": true,
+    "punctual": [
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_back/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.006976837186584817,
+            "lp_db": 72.41598596952481,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 1000
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06420515208810684,
+            "lp_db": 82.05509887732458,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 1000
+          }
+        ],
+        "energySumGlobal": 0.07118198927469166,
+        "lpDbGlobal": 82.50310129442276,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_back",
+        "relativePath": "Punctual receivers/r_back/Sound level.recp"
+      },
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_bot/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.006952921988158778,
+            "lp_db": 72.40107365297372,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 1000
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06438427860484808,
+            "lp_db": 82.06719842667061,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 1000
+          }
+        ],
+        "energySumGlobal": 0.07133720059300686,
+        "lpDbGlobal": 82.51256071469945,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_bot",
+        "relativePath": "Punctual receivers/r_bot/Sound level.recp"
+      },
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_front/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.006931244428415084,
+            "lp_db": 72.38751223063804,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 994
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06436186402788735,
+            "lp_db": 82.06568622180178,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 994
+          }
+        ],
+        "energySumGlobal": 0.07129310845630243,
+        "lpDbGlobal": 82.50987559504938,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_front",
+        "relativePath": "Punctual receivers/r_front/Sound level.recp"
+      },
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_left/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.006982273651487958,
+            "lp_db": 72.41936874491108,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 994
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06442225391219836,
+            "lp_db": 82.06975923885713,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 994
+          }
+        ],
+        "energySumGlobal": 0.07140452756368632,
+        "lpDbGlobal": 82.51665758733722,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_left",
+        "relativePath": "Punctual receivers/r_left/Sound level.recp"
+      },
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_near/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.007439031961553155,
+            "lp_db": 72.6945643331621,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 989
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06891426352194685,
+            "lp_db": 82.36249127934812,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 989
+          }
+        ],
+        "energySumGlobal": 0.0763532954835,
+        "lpDbGlobal": 82.80767795046961,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_near",
+        "relativePath": "Punctual receivers/r_near/Sound level.recp"
+      },
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_right/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.0069758560521222535,
+            "lp_db": 72.41537518954634,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 1000
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06435916985901713,
+            "lp_db": 82.06550442359236,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 1000
+          }
+        ],
+        "energySumGlobal": 0.07133502591113938,
+        "lpDbGlobal": 82.51242831999892,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_right",
+        "relativePath": "Punctual receivers/r_right/Sound level.recp"
+      },
+      {
+        "path": "/home/runner/work/sonoplan/sonoplan/engine/fixtures/minimal_room/inputs/Punctual receivers/r_top/Sound level.recp",
+        "formatVersion": 2,
+        "quantityInFile": "energy_p2_homogeneous",
+        "unitInFile": "Pa2_homogeneous",
+        "displayQuantity": "Lp_dB",
+        "displayUnit": "dB",
+        "conversion": "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy sum",
+        "sourceDoc": "I-Simpa Docs/file_recp.rst + e_report_gabe_recp.cpp GetArrayData @ 929a5c8e5f590b189f29155faeff8670f3699479",
+        "bandLabels": [
+          "100 Hz",
+          "1000 Hz"
+        ],
+        "timestepCount": 1000,
+        "bandCount": 2,
+        "bands": [
+          {
+            "band_label": "100 Hz",
+            "energy_sum": 0.006942180935766373,
+            "lp_db": 72.39435937278662,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 994
+          },
+          {
+            "band_label": "1000 Hz",
+            "energy_sum": 0.06357272583227314,
+            "lp_db": 82.01210841913648,
+            "lp_db_reason": null,
+            "nonzero_timesteps": 994
+          }
+        ],
+        "energySumGlobal": 0.07051490676803951,
+        "lpDbGlobal": 82.46220944709735,
+        "lpDbGlobalReason": null,
+        "notes": [
+          "Disk values are p^2-homogeneous energy, not SPL.",
+          "Zero energy sum -> lp_db is null (not 0 dB / silence).",
+          "A-weighting is not applied here; apply once to unweighted bands only."
+        ],
+        "receiverId": "r_top",
+        "relativePath": "Punctual receivers/r_top/Sound level.recp"
+      }
+    ],
+    "errors": [],
+    "statsProbe": {
+      "path": "statsSPPS.gabe",
+      "formatVersion": 2,
+      "columns": [
+        {
+          "label": "",
+          "colType": "SHORTSTRING",
+          "rows": 7,
+          "ints": null,
+          "strings": [
+            "Particles absorbed by the atmosphere",
+            "Particles absorbed by the materials",
+            "Particles absorbed by the fittings",
+            "Particles lost by infinite loops",
+            "Particles lost by meshing problems",
+            "Particles remaining at the end of the calculation",
+            "Total"
+          ]
+        },
+        {
+          "label": "100 Hz",
+          "colType": "INT",
+          "rows": 7,
+          "ints": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            19999,
+            20000
+          ],
+          "strings": null
+        },
+        {
+          "label": "1000 Hz",
+          "colType": "INT",
+          "rows": 7,
+          "ints": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            20000,
+            20000
+          ],
+          "strings": null
+        }
+      ],
+      "note": "Particle statistics GABE; not Lp. Zero receiver energy may coexist with remaining particles."
+    }
+  },
+  "sci003Golden": {
+    "status": "decoder_ok_golden_pending",
+    "toleranceDb": 0.1,
+    "note": "SCI-003: numerical golden vs I-Simpa GUI on identical inputs not yet recorded; do not invent reference Lp."
+  },
+  "notes": [
+    "Base SPPS does not claim diffraction/interference/modal physics as computed.",
+    "Lw != Lp; .recp stores p^2-homogeneous energy; Lp = 10*log10(E*(1/(20e-6 Pa)^2)) after energy sum.",
+    "Zero receiver energy != 0 dB / silence (lpDbGlobal=null)."
+  ],
+  "attempt": {
+    "ok": true,
+    "error_code": null,
+    "error_message": null,
+    "spps_bin": null,
+    "work_dir": "../fixtures/minimal_room/inputs",
+    "exit_code": null,
+    "duration_s": null,
+    "failure_reasons": [],
+    "output_checks": [],
+    "artifact_paths": [
+      "Punctual receivers/r_back/Sound level.recp",
+      "Punctual receivers/r_bot/Sound level.recp",
+      "Punctual receivers/r_front/Sound level.recp",
+      "Punctual receivers/r_left/Sound level.recp",
+      "Punctual receivers/r_near/Sound level.recp",
+      "Punctual receivers/r_right/Sound level.recp",
+      "Punctual receivers/r_top/Sound level.recp"
+    ],
+    "stdout_tail": null,
+    "stderr_tail": null
+  }
+}

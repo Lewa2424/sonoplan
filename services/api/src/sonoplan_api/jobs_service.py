@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from sonoplan_api.github_actions_jobs import (
+    enqueue_github_actions_job,
+    jobs_backend,
+    sync_github_actions_job,
+)
 from sonoplan_api.job_execution import execute_job
 from sonoplan_api.models import JobRow, RevisionRow
 
@@ -19,8 +23,8 @@ def _utcnow() -> datetime:
 
 
 def jobs_inline() -> bool:
-    """Default inline for local/tests; set SONOPLAN_JOBS_INLINE=0 to use Celery."""
-    return os.environ.get("SONOPLAN_JOBS_INLINE", "1") != "0"
+    """Default inline for local/tests; set SONOPLAN_JOBS_BACKEND=github_actions to offload."""
+    return jobs_backend() == "inline"
 
 
 def request_fingerprint(revision_id: str, snapshot_hash: str) -> str:
@@ -33,15 +37,21 @@ def request_fingerprint(revision_id: str, snapshot_hash: str) -> str:
 
 
 def enqueue_job(db: Session, job: JobRow) -> JobRow:
+    backend = jobs_backend()
+
+    if backend == "github_actions":
+        return enqueue_github_actions_job(db, job)
+
     job.status = "queued"
     job.updated_at = _utcnow()
     db.commit()
     db.refresh(job)
 
-    if jobs_inline():
+    if backend == "inline":
         executed = execute_job(db, job.id)
         return executed if executed is not None else job
 
+    # celery
     try:
         from sonoplan_worker.celery_app import run_calculation
 
@@ -54,6 +64,16 @@ def enqueue_job(db: Session, job: JobRow) -> JobRow:
         job.updated_at = job.finished_at
         db.commit()
         db.refresh(job)
+    return job
+
+
+def refresh_job(db: Session, job: JobRow) -> JobRow:
+    """Sync remote worker progress (GitHub Actions) on read."""
+    if jobs_backend() == "github_actions" and job.status in (
+        "queued",
+        "running",
+    ):
+        return sync_github_actions_job(db, job)
     return job
 
 
