@@ -47,7 +47,13 @@ pip install -e ".[dev]"
 # при поднятом postgres из infra/compose:
 # set DATABASE_URL=postgresql+psycopg://sonoplan:sonoplan@localhost:5432/sonoplan
 # alembic upgrade head
-uvicorn sonoplan_api.main:app --reload --app-dir src
+uvicorn sonoplan_api.main:app --app-dir src --host 127.0.0.1 --port 8000
+```
+
+На Windows **не используйте `--reload`**: WatchFiles + kill оставляют orphan `multiprocessing.spawn` на порту 8000 — UI уходит в offline/mock. Перезапуск:
+
+```powershell
+powershell -File services/api/scripts/restart-api.ps1
 ```
 
 OpenAPI UI: `http://127.0.0.1:8000/docs`
