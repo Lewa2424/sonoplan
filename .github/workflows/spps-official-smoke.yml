@@ -103,9 +103,10 @@ jobs:
           cfg = Path("ci-official-smoke/workdir/config.xml").read_text(encoding="utf-8", errors="replace")
           import re
           cfg_ids = set(int(x) for x in re.findall(r'type_surface id="(\d+)"', cfg))
+          missing = sorted(m for m in mats if m not in cfg_ids and m != -1)
           Path("ci-official-smoke/mesh_vs_config_materials.txt").write_text(
               f"mesh_face_idMat={sorted(mats)}\nconfig_type_surface_ids={sorted(cfg_ids)}\n"
-              f"mesh_ids_missing_in_config={sorted(set(mats) - cfg_ids - {{-1}})}\n",
+              f"mesh_ids_missing_in_config={missing}\n",
               encoding="utf-8",
           )
           print(Path("ci-official-smoke/mesh_vs_config_materials.txt").read_text())
