@@ -93,6 +93,22 @@ class ExportRevisionTests(unittest.TestCase):
         )
         self.assertGreaterEqual(abs(z - 1.5), 0.35)
 
+    def test_coupe_overhangs_walls_so_spps_links_all_tetras(self) -> None:
+        from sonoplan_adapter.export_revision import build_config_xml
+
+        payload = compact_export_payload(_rect_snapshot(w=20, d=12, h=6))
+        coupe = build_config_xml(payload).getroot().find(
+            "recepteurss/recepteur_surfacique_coupe"
+        )
+        assert coupe is not None
+        f = {k: float(coupe.get(k) or "nan") for k in ("ay", "bx", "by", "cx")}
+        # Coupe edges exactly on walls → SPPS float link test skips wall tetras.
+        self.assertLess(f["bx"], 0.0)
+        self.assertLess(f["by"], 0.0)
+        self.assertGreater(f["ay"], 12.0)
+        self.assertGreater(f["cx"], 20.0)
+        self.assertLess(f["cx"] - 20.0, 0.1)
+
     def test_write_workdir_scales_mesh(self) -> None:
         root = Path(__file__).resolve().parents[2]
         fixture = root / "fixtures" / "minimal_room" / "inputs"

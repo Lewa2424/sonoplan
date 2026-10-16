@@ -23,6 +23,11 @@ FREQS = [
 ]
 CALC_BANDS = {100, 1000}
 REF_CUBE_M = 5.0
+# SPPS links a tetra to the coupe only if a tetra edge pierces the parallelogram
+# strictly inside (float32, u/v in [0,1)). Room-sized coupe edges lie exactly on
+# the walls, so tetras whose plane section touches only wall edges were never
+# linked and got no cut-map energy (wedge-shaped empty zones). Overhang fixes it.
+COUPE_WALL_OVERHANG_M = 0.01
 
 
 @dataclass(frozen=True)
@@ -400,16 +405,17 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
     coupe = ET.SubElement(recepteurss, "recepteur_surfacique_coupe")
     coupe.set("id", "7001")
     coupe.set("name", "plan_coupe")
-    # Rectangle A—B—C in SPPS coords (origin at room AABB min).
-    # B = (0,0,z), A = (0,depth,z), C = (width,0,z) → BA along +Y, BC along +X.
-    coupe.set("ax", _f(0.0))
-    coupe.set("ay", _f(depth))
+    # Rectangle A—B—C in SPPS coords (origin at room AABB min), overhanging walls.
+    # B = (-m,-m,z), A = (-m,depth+m,z), C = (width+m,-m,z) → BA +Y, BC +X.
+    m = COUPE_WALL_OVERHANG_M
+    coupe.set("ax", _f(-m))
+    coupe.set("ay", _f(depth + m))
     coupe.set("az", _f(coupe_z))
-    coupe.set("bx", _f(0.0))
-    coupe.set("by", _f(0.0))
+    coupe.set("bx", _f(-m))
+    coupe.set("by", _f(-m))
     coupe.set("bz", _f(coupe_z))
-    coupe.set("cx", _f(width))
-    coupe.set("cy", _f(0.0))
+    coupe.set("cx", _f(width + m))
+    coupe.set("cy", _f(-m))
     coupe.set("cz", _f(coupe_z))
     coupe.set("resolution", _f(resolution))
 
