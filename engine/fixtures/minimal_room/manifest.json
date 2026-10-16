@@ -1,0 +1,34 @@
+{
+  "id": "minimal_room",
+  "status": "scaffold",
+  "description": "Minimal closed room fixture for STG-01. Binary mesh/tetramesh and golden outputs are filled after first successful SPPS run — not invented.",
+  "isimpa_commit": "929a5c8e5f590b189f29155faeff8670f3699479",
+  "upstream_reference": "I-Simpa src/spps/tests/config.xml (structure only; not claimed runnable without mesh)",
+  "room": {
+    "size_m": [4.0, 3.0, 2.5],
+    "note": "Conceptual box; physical surfaces produced by adapter after STG-01 build succeeds"
+  },
+  "required_inputs": [
+    "config.xml",
+    "mesh.cbin",
+    "tetramesh.mbin"
+  ],
+  "expected_outputs": [
+    {
+      "path": "Punctual receivers/Sound level.recp",
+      "required": true,
+      "min_bytes": 1,
+      "description": "Punctual receiver levels (binary)"
+    },
+    {
+      "path": "statsSPPS.gabe",
+      "required": false,
+      "min_bytes": 1,
+      "description": "Optional stats when SPPS writes them"
+    }
+  ],
+  "golden_values": null,
+  "golden_values_note": "SCI-003: compare with I-Simpa GUI/CLI on identical inputs after first run; tolerance 0.1 dB for identical binary postprocess.",
+  "seed": 0,
+  "multithreading_for_repro": false
+}

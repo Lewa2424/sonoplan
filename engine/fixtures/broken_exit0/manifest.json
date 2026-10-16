@@ -1,0 +1,19 @@
+{
+  "id": "broken_exit0",
+  "status": "active_regression",
+  "description": "Simulates SPPS returning exit code 0 without valid output files (ENG-009).",
+  "simulated_exit_code": 0,
+  "expected_outputs": [
+    {
+      "path": "Punctual receivers/Sound level.recp",
+      "required": true,
+      "min_bytes": 1,
+      "description": "Intentionally absent"
+    }
+  ],
+  "expected_adapter_ok": false,
+  "expected_failure_tokens": [
+    "missing_required_output",
+    "exit_0_without_valid_outputs"
+  ]
+}

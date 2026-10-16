@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light;
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #1a2332;
+  --muted: #5a6575;
+  --accent: #2c5f7c;
+  --accent-soft: #dce8ef;
+  --border: #d5dbe3;
+  --nav-h: 56px;
+  --header-h: 52px;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.45;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+.app-shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: var(--header-h) 1fr var(--nav-h);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.app-main {
+  padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  overflow: auto;
+}
+
+.app-nav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  min-height: var(--nav-h);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 8px;
+}
+
+.nav-link--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.page h2 {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+}
+
+.page-lead {
+  margin: 0 0 8px;
+}
+
+.page-hint,
+.page-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.page-meta {
+  margin-top: 16px;
+  font-family: ui-monospace, monospace;
+}

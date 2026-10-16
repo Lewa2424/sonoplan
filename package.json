@@ -1,0 +1,17 @@
+{
+  "name": "sonoplan",
+  "private": true,
+  "version": "0.0.0",
+  "description": "SonoPlan — мобильное PWA предварительного акустического проектирования",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:web": "pnpm --filter @sonoplan/web dev",
+    "build:web": "pnpm --filter @sonoplan/web build",
+    "typecheck": "pnpm -r --filter \"./packages/*\" --filter \"./apps/*\" typecheck",
+    "test:domain": "pnpm --filter @sonoplan/domain test",
+    "build:packages": "pnpm --filter @sonoplan/domain --filter @sonoplan/contracts build"
+  }
+}

@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sonoplan.local/schemas/project.schema.json",
+  "title": "SonoPlanProjectDocument",
+  "description": "JSON Schema документа / снимка модели (DAT-001/005). STG-02: draft body и ModelSnapshot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string",
+      "description": "Имя в draft; не входит в snapshotHash"
+    },
+    "model": {
+      "$ref": "#/$defs/modelSnapshot"
+    },
+    "project": {
+      "type": "object",
+      "required": ["id", "ownerId", "name", "accessPolicy", "currentRevisionId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "ownerId": { "type": "string", "format": "uuid" },
+        "name": { "type": "string", "minLength": 1 },
+        "accessPolicy": { "type": "string" },
+        "currentRevisionId": {
+          "type": ["string", "null"],
+          "format": "uuid"
+        }
+      }
+    },
+    "revision": {
+      "type": "object",
+      "required": [
+        "id",
+        "projectId",
+        "parentId",
+        "schemaVersion",
+        "authorId",
+        "createdAt",
+        "snapshotHash"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "projectId": { "type": "string", "format": "uuid" },
+        "parentId": { "type": ["string", "null"], "format": "uuid" },
+        "schemaVersion": { "type": "string", "const": "1.0" },
+        "authorId": { "type": "string", "format": "uuid" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "snapshotHash": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "description": "SHA-256 hex канонического JSON модели (без имени проекта / камеры)"
+        }
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/room" }
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "workplaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workplace" }
+    },
+    "materials": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/materialVersion" }
+    },
+    "solids": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/solidObstacle" }
+    }
+  },
+  "$defs": {
+    "modelSnapshot": {
+      "type": "object",
+      "required": ["schemaVersion", "rooms", "sources", "workplaces", "materials", "solids"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "1.0" },
+        "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+        "workplaces": { "type": "array", "items": { "$ref": "#/$defs/workplace" } },
+        "materials": { "type": "array", "items": { "$ref": "#/$defs/materialVersion" } },
+        "solids": { "type": "array", "items": { "$ref": "#/$defs/solidObstacle" } }
+      }
+    },
+    "quantity": {
+      "type": "object",
+      "required": ["value", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": ["number", "null"],
+          "description": "null ≠ 0; при null нужна nullReason"
+        },
+        "unit": { "type": "string" },
+        "nullReason": { "type": ["string", "null"] }
+      }
+    },
+    "projectPoint3": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      },
+      "description": "Координаты проекта: X,Y пол, Z вверх"
+    },
+    "room": {
+      "type": "object",
+      "required": ["id", "floorContour", "heightM"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "floorContour": {
+          "type": "array",
+          "minItems": 4,
+          "description": "Явно замкнутый контур: первая вершина = последняя; самопересечение запрещено",
+          "items": {
+            "type": "object",
+            "required": ["x", "y"],
+            "additionalProperties": false,
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        },
+        "heightM": { "$ref": "#/$defs/quantity" },
+        "materialVersionId": { "type": ["string", "null"], "format": "uuid" },
+        "materialNullReason": { "type": ["string", "null"] }
+      }
+    },
+    "materialVersion": {
+      "type": "object",
+      "required": ["id", "catalogKey", "name", "version", "absorptionByBand", "estimated"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "catalogKey": { "type": "string" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "absorptionByBand": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["bandHz", "alpha"],
+            "additionalProperties": false,
+            "properties": {
+              "bandHz": { "type": "number" },
+              "alpha": { "type": ["number", "null"] },
+              "nullReason": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "estimated": {
+          "type": "boolean",
+          "description": "Оценочные свойства → warning при validate"
+        }
+      }
+    },
+    "solidObstacle": {
+      "type": "object",
+      "required": ["id", "name", "floorContour", "baseZM", "heightM"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "floorContour": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        },
+        "baseZM": { "type": "number" },
+        "heightM": { "$ref": "#/$defs/quantity" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["id", "name", "position", "powerSpectrumLw"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "position": { "$ref": "#/$defs/projectPoint3" },
+        "powerSpectrumLw": {
+          "type": "array",
+          "description": "Спектр Lw (дБ); не Lp. Пустой спектр — блокирующая ошибка validate.",
+          "items": {
+            "type": "object",
+            "required": ["bandHz", "level"],
+            "additionalProperties": false,
+            "properties": {
+              "bandHz": { "type": "number" },
+              "level": { "$ref": "#/$defs/quantity" }
+            }
+          }
+        },
+        "directivityId": { "type": ["string", "null"], "format": "uuid" },
+        "weight": { "type": ["number", "null"] },
+        "weightNullReason": { "type": ["string", "null"] }
+      }
+    },
+    "workplace": {
+      "type": "object",
+      "required": ["id", "name", "kind", "position", "receiverHeightM"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string" },
+        "kind": { "type": "string", "enum": ["point", "area"] },
+        "position": { "$ref": "#/$defs/projectPoint3" },
+        "receiverHeightM": { "$ref": "#/$defs/quantity" },
+        "scheduleId": { "type": ["string", "null"], "format": "uuid" }
+      }
+    }
+  }
+}

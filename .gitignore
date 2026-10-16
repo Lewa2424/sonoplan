@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# Logs / temp
+*.log
+tmp/
+temp/
+.cache/
+
+# Docker volumes (local)
+infra/data/
+
+# Local SPPS / I-Simpa heavy artifacts (keep engine/scripts, workflows, sources)
+# engine/.gitignore also covers adapter-local builds; root reinforces common cases.
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+*.lib
+engine/out/
+engine/.cache/
+engine/isimpa/
+engine/I-Simpa/
+**/spps_bin/
+**/isimpa_build/

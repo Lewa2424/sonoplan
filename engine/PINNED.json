@@ -1,0 +1,29 @@
+{
+  "isimpa": {
+    "repository": "https://github.com/Universite-Gustave-Eiffel/I-Simpa.git",
+    "commit": "929a5c8e5f590b189f29155faeff8670f3699479",
+    "ref_at_pin_time": "main",
+    "verified_at": "2026-10-16",
+    "verification": "GitHub API GET /repos/Universite-Gustave-Eiffel/I-Simpa/commits/main",
+    "commit_date": "2026-01-14T09:01:51Z",
+    "commit_summary": "Merge pull request #417 (folder_resources_rework / MacOS Windows Linux build)"
+  },
+  "cmake": {
+    "skip_gui": "-DSKIPISIMPA=ON",
+    "notes": "LIBSIMPA_ONLY=ON builds only the library — that is NOT a SPPS binary build (ENG-002)."
+  },
+  "toolchain_target": {
+    "os": "Linux (ubuntu-22.04 CI runner or equivalent VPS)",
+    "base_image": "ubuntu:22.04 (optional Docker-on-Linux only)",
+    "cmake_build_type": "Release",
+    "compiler": "g++ from build-essential (version fixed after first successful build)"
+  },
+  "primary_build_path": "github_actions_or_remote_linux",
+  "local_docker_desktop": "blocked",
+  "binary_checksum": null,
+  "binary_checksum_note": "SHA-256 of engine/dist/spps from build-spps-native.sh / GitHub Actions artifact. Filled after first successful Linux build.",
+  "image_checksum": null,
+  "image_checksum_note": "Digest of sonoplan-spps image is filled only if Docker Engine on Linux is used (optional). Not required for primary CI path.",
+  "build_status": "NOT_RUN",
+  "build_blocker": "Local Docker Desktop blocked (Windows 10.0.19044, OS update unavailable). Primary path: GitHub Actions (.github/workflows/build-spps.yml) or remote Linux VPS with build-spps-native.sh. No SPPS artifact yet. Verified/updated 2026-10-16."
+}

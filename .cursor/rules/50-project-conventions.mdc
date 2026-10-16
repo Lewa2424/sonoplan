@@ -1,0 +1,53 @@
+---
+description: "Технологические и кодовые соглашения SonoPlan."
+alwaysApply: true
+---
+
+# SonoPlan: соглашения проекта
+
+## Стек (проектное решение ТЗ)
+
+- Web: React, TypeScript, Vite, React Konva, Three.js, React Three Fiber, Zustand, TanStack Query, Dexie, React Hook Form, Zod, vite-plugin-pwa.
+- API: FastAPI, Pydantic, SQLAlchemy, Alembic, PostgreSQL.
+- Jobs: Celery, RabbitMQ; файлы — S3-совместимое хранилище; auth — OIDC (базово Keycloak).
+- Engine: SPPS + адаптер; TetGen в выбранной лицензионной конфигурации.
+- Dev: Docker Compose; на Windows для ядра предпочтителен WSL2.
+- Стек не менять без записи об изменении и повторных испытаний.
+
+## Целевая структура
+
+```
+apps/web/
+services/api/
+services/worker/
+packages/domain/
+packages/contracts/
+engine/adapter/
+engine/patches/
+engine/fixtures/
+infra/
+tests/e2e/
+docs/
+.cursor/rules/
+```
+
+## Код
+
+- Стиль — как в ближайшем аналогичном файле репо.
+- Components: `PascalCase`; hooks: `use*`; строгий TypeScript без скрытого `any`.
+- Nullable/optional явны; неизвестное = `null` + причина, не `0`.
+- Комментарии только для неочевидного алгоритма, инварианта, побочного эффекта, совместимости.
+- Не рефакторить несвязанные файлы. Не генерировать фиктивный акустический результат.
+
+## Локализация
+
+- UI старт: русский; все пользовательские строки — через словари.
+- Не внедрять полную i18n-систему сверх словарей без задачи.
+- Единицы и подписи величин всегда рядом с числами.
+
+## Связанные правила
+
+- UI/мобильный UX: `sonoplan-ui.mdc`.
+- Ядро/адаптер: `60-engine-spps.mdc`.
+- Изменённые пути: `changed-files-sync.mdc` → `docs/CHANGED_FILES.txt`.
+- Структура: `20-code-map.mdc` → `CODE_MAP.md`.

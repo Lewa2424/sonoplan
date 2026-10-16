@@ -1,0 +1,109 @@
+# STG-01: build SPPS from pinned I-Simpa without GUI (SKIPISIMPA=ON).
+# Primary path when developer Windows cannot run Docker Desktop (build 19044).
+# Requires: git remote on GitHub (or Actions-compatible host) + workflow_dispatch / push.
+#
+# Artifact: spps-linux-x86_64-<commit12>.tar.gz (binary + ORIGIN.txt + SHA256SUMS)
+
+name: Build SPPS
+
+"on":
+  workflow_dispatch:
+  push:
+    paths:
+      - "engine/Dockerfile"
+      - "engine/PINNED.json"
+      - "engine/patches/**"
+      - "engine/scripts/build-spps-native.sh"
+      - "engine/scripts/fetch-isimpa.sh"
+      - ".github/workflows/build-spps.yml"
+  pull_request:
+    paths:
+      - "engine/Dockerfile"
+      - "engine/PINNED.json"
+      - "engine/patches/**"
+      - "engine/scripts/build-spps-native.sh"
+      - "engine/scripts/fetch-isimpa.sh"
+      - ".github/workflows/build-spps.yml"
+
+concurrency:
+  group: build-spps-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: Release
+  CPM_SOURCE_CACHE: ${{ github.workspace }}/.cache/CPM
+
+jobs:
+  build-spps:
+    name: Native Linux SPPS (ubuntu-22.04)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout SonoPlan
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          # Aligned with engine/Dockerfile + upstream I-Simpa Linux CI.
+          # GUI toolkits omitted: cmake uses -DSKIPISIMPA=ON.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            cmake \
+            git \
+            python3 \
+            python3-dev \
+            swig \
+            libboost-all-dev \
+            byacc \
+            gettext \
+            libpng-dev \
+            libjpeg-dev
+
+      - name: Cache CPM packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CPM_SOURCE_CACHE }}
+          key: ${{ runner.os }}-cpm-spps-${{ hashFiles('engine/PINNED.json') }}
+          restore-keys: |
+            ${{ runner.os }}-cpm-spps-
+
+      - name: Build SPPS (native)
+        run: |
+          chmod +x engine/scripts/fetch-isimpa.sh engine/scripts/build-spps-native.sh
+          ./engine/scripts/build-spps-native.sh
+
+      - name: Read pin short SHA
+        id: pin
+        run: |
+          COMMIT=$(python3 -c "import json; print(json.load(open('engine/PINNED.json'))['isimpa']['commit'])")
+          echo "commit=${COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "short=${COMMIT:0:12}" >> "$GITHUB_OUTPUT"
+          echo "checksum=$(awk '{print $1}' engine/dist/SHA256SUMS)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload SPPS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spps-linux-x86_64-${{ steps.pin.outputs.short }}
+          path: |
+            engine/dist/spps
+            engine/dist/ORIGIN.txt
+            engine/dist/SHA256SUMS
+            engine/dist/spps-linux-x86_64-${{ steps.pin.outputs.short }}.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Job summary
+        run: |
+          {
+            echo "## SPPS build"
+            echo ""
+            echo "- I-Simpa commit: \`${{ steps.pin.outputs.commit }}\`"
+            echo "- Binary SHA-256: \`${{ steps.pin.outputs.checksum }}\`"
+            echo "- Artifact: \`spps-linux-x86_64-${{ steps.pin.outputs.short }}\`"
+            echo ""
+            echo "Record \`binary_checksum\` in \`engine/PINNED.json\` after smoke/fixture verification."
+            echo "CMake flag: \`-DSKIPISIMPA=ON\` (not \`-DLIBSIMPA_ONLY=ON\`)."
+          } >> "$GITHUB_STEP_SUMMARY"

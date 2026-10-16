@@ -1,0 +1,17 @@
+# Local I-Simpa clone and build artifacts (do not commit upstream tree)
+.cache/
+build/
+dist/
+out/
+*.o
+*.a
+*.so
+*.dll
+*.exe
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/

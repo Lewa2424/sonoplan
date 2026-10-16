@@ -1,0 +1,439 @@
+openapi: 3.0.3
+info:
+  title: SonoPlan API
+  version: 0.0.0-stg02
+  description: |
+    OpenAPI `/api/v1` (API-001). STG-02: projects, draft ETag, revisions, validate.
+    Capabilities — stub until STG-01 verifies SPPS. Jobs/results — ещё не реализованы.
+servers:
+  - url: /
+    description: relative to API host
+tags:
+  - name: system
+  - name: projects
+  - name: revisions
+  - name: jobs
+  - name: results
+  - name: comparisons
+  - name: reports
+  - name: exchange
+paths:
+  /api/v1/health:
+    get:
+      tags: [system]
+      summary: Liveness / readiness
+      operationId: getHealth
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/capabilities:
+    get:
+      tags: [system]
+      summary: Engine capabilities registry (STUB)
+      operationId: getCapabilities
+      responses:
+        "200":
+          description: Stub registry; not a verified SPPS profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilitiesResponse"
+
+  /api/v1/projects:
+    get:
+      tags: [projects]
+      summary: List projects
+      operationId: listProjects
+      responses:
+        "200":
+          description: Project list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+    post:
+      tags: [projects]
+      summary: Create project (+ empty draft)
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSummary"
+
+  /api/v1/projects/{id}/draft:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    get:
+      tags: [projects]
+      summary: Get draft (ETag)
+      operationId: getDraft
+      responses:
+        "200":
+          description: Draft body + ETag header
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftResponse"
+        "404":
+          description: Not found
+    patch:
+      tags: [projects]
+      summary: Patch draft (If-Match / ETag)
+      operationId: patchDraft
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Current draft ETag; mismatch → 412; missing → 428
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftPatch"
+      responses:
+        "200":
+          description: Updated draft
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftResponse"
+        "412":
+          description: ETag mismatch
+        "428":
+          description: If-Match required
+        "404":
+          description: Not found
+
+  /api/v1/projects/{id}/revisions:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [revisions]
+      summary: Snapshot draft → immutable revision
+      operationId: createRevision
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RevisionCreate"
+      responses:
+        "201":
+          description: Revision created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RevisionCreated"
+        "404":
+          description: Project/draft not found
+
+  /api/v1/revisions/{id}/validate:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [revisions]
+      summary: Validate model revision
+      operationId: validateRevision
+      responses:
+        "200":
+          description: Validation result (errors blocking, warnings advisory)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateResponse"
+        "404":
+          description: Revision not found
+
+  /api/v1/jobs:
+    post:
+      tags: [jobs]
+      summary: Enqueue calculation (Idempotency-Key required)
+      operationId: createJob
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/jobs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    get:
+      tags: [jobs]
+      summary: Job status
+      operationId: getJob
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/jobs/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    get:
+      tags: [jobs]
+      summary: Job events (SSE later)
+      operationId: getJobEvents
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/jobs/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [jobs]
+      summary: Cancel job
+      operationId: cancelJob
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/results/{id}/manifest:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    get:
+      tags: [results]
+      summary: ResultManifest
+      operationId: getResultManifest
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/results/{id}/samples:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [results]
+      summary: Sample points from result
+      operationId: sampleResult
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/results/{id}/slices:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    post:
+      tags: [results]
+      summary: Request result slices
+      operationId: sliceResult
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/comparisons:
+    post:
+      tags: [comparisons]
+      summary: Compare revisions/results
+      operationId: createComparison
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/optimizations:
+    post:
+      tags: [comparisons]
+      summary: Optimization job (later stages)
+      operationId: createOptimization
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/reports:
+    post:
+      tags: [reports]
+      summary: Generate report
+      operationId: createReport
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/imports:
+    post:
+      tags: [exchange]
+      summary: Import project archive
+      operationId: createImport
+      responses:
+        "501":
+          description: Not implemented yet
+
+  /api/v1/exports/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdPath"
+    get:
+      tags: [exchange]
+      summary: Download export
+      operationId: getExport
+      responses:
+        "501":
+          description: Not implemented yet
+
+components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, schemaVersion]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        schemaVersion:
+          type: string
+          example: "1.0"
+
+    CapabilitiesResponse:
+      type: object
+      required: [stub, engineProfileId, bandsHz, notes]
+      properties:
+        stub:
+          type: boolean
+          const: true
+          description: Explicitly marked stub until STG-01 verifies SPPS
+        engineProfileId:
+          type: string
+          nullable: true
+        bandsHz:
+          type: array
+          items:
+            type: number
+        notes:
+          type: array
+          items:
+            type: string
+
+    ProjectCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        ownerId:
+          type: string
+          format: uuid
+          nullable: true
+        accessPolicy:
+          type: string
+          default: private
+
+    ProjectSummary:
+      type: object
+      required: [id, ownerId, name, accessPolicy, schemaVersion, currentRevisionId]
+      properties:
+        id: { type: string, format: uuid }
+        ownerId: { type: string, format: uuid }
+        name: { type: string }
+        accessPolicy: { type: string }
+        schemaVersion: { type: string }
+        currentRevisionId: { type: string, format: uuid, nullable: true }
+
+    ProjectListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSummary"
+
+    DraftResponse:
+      type: object
+      required: [projectId, etag, body]
+      properties:
+        projectId: { type: string, format: uuid }
+        etag: { type: string }
+        body:
+          type: object
+          description: ProjectDraft JSON (schemaVersion, name, model)
+
+    DraftPatch:
+      type: object
+      properties:
+        schemaVersion: { type: string }
+        name: { type: string }
+        model: { type: object }
+        rooms: { type: array, items: { type: object } }
+        sources: { type: array, items: { type: object } }
+        workplaces: { type: array, items: { type: object } }
+        materials: { type: array, items: { type: object } }
+        solids: { type: array, items: { type: object } }
+
+    RevisionCreate:
+      type: object
+      properties:
+        authorId: { type: string, format: uuid, nullable: true }
+        note: { type: string, nullable: true }
+
+    RevisionCreated:
+      type: object
+      required: [revisionId, snapshotHash, schemaVersion, projectId, parentId]
+      properties:
+        revisionId: { type: string, format: uuid }
+        snapshotHash: { type: string, minLength: 64, maxLength: 64 }
+        schemaVersion: { type: string }
+        projectId: { type: string, format: uuid }
+        parentId: { type: string, format: uuid, nullable: true }
+
+    ValidationIssue:
+      type: object
+      required: [code, severity, message]
+      properties:
+        code: { type: string }
+        severity: { type: string, enum: [error, warning] }
+        message: { type: string }
+        path: { type: string, nullable: true }
+        entityId: { type: string, format: uuid, nullable: true }
+
+    ValidateResponse:
+      type: object
+      required: [revisionId, snapshotHash, ok, errors, warnings]
+      properties:
+        revisionId: { type: string, format: uuid }
+        snapshotHash: { type: string }
+        ok: { type: boolean }
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValidationIssue"

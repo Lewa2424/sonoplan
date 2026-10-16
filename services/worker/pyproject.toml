@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sonoplan-worker"
+version = "0.0.0"
+description = "SonoPlan Celery worker scaffold (connects to adapter later)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "celery[redis]>=5.4.0,<6",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0,<9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

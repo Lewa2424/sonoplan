@@ -1,0 +1,9 @@
+---
+description: "Устаревший ярлык UAOS/LEX. Используй sonoplan-ui.mdc."
+globs: apps/web/**/*.{tsx,css},src/**/*.{tsx,css}
+alwaysApply: false
+---
+
+# Устарело
+
+Этот файл перенесён из другого проекта. Актуальные UI-правила SonoPlan: `sonoplan-ui.mdc`.

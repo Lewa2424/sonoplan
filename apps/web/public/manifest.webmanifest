@@ -1,0 +1,11 @@
+{
+  "name": "SonoPlan",
+  "short_name": "SonoPlan",
+  "description": "Предварительное акустическое проектирование производственных помещений",
+  "lang": "ru",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a2332",
+  "theme_color": "#1a2332",
+  "orientation": "any"
+}
