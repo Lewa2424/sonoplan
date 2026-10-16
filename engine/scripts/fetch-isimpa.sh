@@ -12,8 +12,10 @@ DEST="${ENGINE_DIR}/.cache/isimpa"
 
 mkdir -p "$(dirname "${DEST}")"
 if [[ -d "${DEST}/.git" ]]; then
+  # reset --hard: checkout --force is a no-op when HEAD is already COMMIT,
+  # leaving prior SonoPlan patch edits in the working tree (CI cache reuse).
   git -C "${DEST}" fetch --depth=1 origin "${COMMIT}"
-  git -C "${DEST}" checkout --force "${COMMIT}"
+  git -C "${DEST}" reset --hard "${COMMIT}"
 else
   git clone --filter=blob:none "${REPO}" "${DEST}"
   git -C "${DEST}" checkout "${COMMIT}"

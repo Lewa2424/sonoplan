@@ -61,7 +61,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ci-official-smoke
-          strings engine/dist/spps | grep -F 'sonoplan-link-all-tetras-v1' \
+          # Prefer grep -a: Release may leave the used marker without a NUL-terminated
+          # strings(1) hit depending on section packing.
+          grep -a -F 'sonoplan-deposit-all-recp-v3' engine/dist/spps \
             || { echo "BUILD_FAIL: patch marker missing in spps binary"; exit 1; }
           echo "BUILD_OK marker present"
           sha256sum engine/dist/spps | tee ci-official-smoke/sha256.txt

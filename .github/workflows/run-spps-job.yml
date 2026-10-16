@@ -301,6 +301,27 @@ jobs:
           if [[ -f ../fixtures/minimal_room/inputs/statsSPPS.gabe ]]; then
             cp -a ../fixtures/minimal_room/inputs/statsSPPS.gabe ../../ci-spps-job/outputs/ || true
           fi
+          if [[ -f "../fixtures/minimal_room/inputs/Total energy.recp" ]]; then
+            cp -a "../fixtures/minimal_room/inputs/Total energy.recp" ../../ci-spps-job/outputs/ || true
+            python3 - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, ".")
+          from sonoplan_adapter.gabe import load_gabe
+          p = Path("../fixtures/minimal_room/inputs/Total energy.recp")
+          t = load_gabe(p)
+          rows = []
+          for c in t.columns:
+              if c.floats is not None:
+                  s = float(sum(c.floats))
+                  rows.append({"label": c.label, "energySum": s, "nz": sum(1 for v in c.floats if v != 0)})
+          summary = {"path": str(p), "bands": rows, "nonzero": [r for r in rows if (r["energySum"] or 0) > 0]}
+          Path("../../ci-spps-job/outputs/total_energy_summary.json").write_text(
+              json.dumps(summary, indent=2), encoding="utf-8"
+          )
+          print("total_energy_nonzero", summary["nonzero"])
+          PY
+          fi
 
       - name: decode-outputs + ResultManifest (post-SPPS)
         if: success()
