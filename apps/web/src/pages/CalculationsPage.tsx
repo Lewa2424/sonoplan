@@ -90,6 +90,7 @@ export function CalculationsPage() {
             originX?: number;
             originY?: number;
             cellSizeM?: number;
+            cellSizeYM?: number;
             nx?: number;
             ny?: number;
             zM?: number;
@@ -114,6 +115,7 @@ export function CalculationsPage() {
             originX: grid.originX,
             originY: grid.originY,
             cellSizeM: grid.cellSizeM,
+            cellSizeYM: grid.cellSizeYM,
             nx: grid.nx,
             ny: grid.ny,
             zM: grid.zM,

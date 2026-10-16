@@ -44,6 +44,48 @@ class RsbinIoTests(unittest.TestCase):
             self.assertTrue(any(v is not None for v in decoded.grid["lpDb"]))
             self.assertGreater(decoded.grid["nx"], 0)
 
+    def test_coupe_two_triangles_per_cell_no_stripe_rows(self) -> None:
+        """SPPS coupe writes 2 triangles/cell; lattice grid must not stripe."""
+        # 3×3 nodes → 2×2 cells; each cell = 2 triangles (centroids mid-cell)
+        nodes = [
+            (0.0, 0.0, 1.5),
+            (1.0, 0.0, 1.5),
+            (2.0, 0.0, 1.5),
+            (0.0, 1.0, 1.5),
+            (1.0, 1.0, 1.5),
+            (2.0, 1.0, 1.5),
+            (0.0, 2.0, 1.5),
+            (1.0, 2.0, 1.5),
+            (2.0, 2.0, 1.5),
+        ]
+        e = 1e-2
+        faces = [
+            # cell (0,0)
+            (0, 1, 4, e),
+            (0, 4, 3, e),
+            # cell (1,0)
+            (1, 2, 5, e),
+            (1, 5, 4, e),
+            # cell (0,1)
+            (3, 4, 7, e),
+            (3, 7, 6, e),
+            # cell (1,1)
+            (4, 5, 8, e),
+            (4, 8, 7, e),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rs_cut.csbin"
+            write_synthetic_csbin(path, nodes=nodes, faces=faces)
+            grid = read_surface_csbin(path).grid
+            self.assertIsNotNone(grid)
+            assert grid is not None
+            self.assertEqual(grid["nx"], 2)
+            self.assertEqual(grid["ny"], 2)
+            self.assertEqual(grid.get("source"), "rsbin_coupe_lattice")
+            lp = grid["lpDb"]
+            self.assertEqual(len(lp), 4)
+            self.assertTrue(all(v is not None for v in lp))
+
     def test_manifest_map_available_from_csbin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp)

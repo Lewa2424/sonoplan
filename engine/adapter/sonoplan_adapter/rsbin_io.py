@@ -193,52 +193,90 @@ def _faces_to_grid(
     nodes: list[tuple[float, float, float]],
     faces: list[SurfaceFaceEnergy],
 ) -> dict[str, Any] | None:
-    """Bin face centroids into a regular XY grid for plan heatmap."""
+    """Bin face energy into a regular XY grid for plan heatmap.
+
+    Coupe RSBIN stores each cell as **two triangles**. Centroid-only spacing
+    is ~½–⅓ of the true cell → empty stripe rows in the plan. Prefer the
+    **node lattice** (unique X/Y of vertices) as the cell size.
+    """
     if not faces or not nodes:
         return None
-    centroids: list[tuple[float, float, float, float | None]] = []
+    centroids: list[tuple[float, float, float, float]] = []
     zs: list[float] = []
     for f in faces:
         try:
             pa, pb, pc = nodes[f.a], nodes[f.b], nodes[f.c]
         except IndexError:
             continue
+        if f.energy_sum <= 0:
+            continue
         cx = (pa[0] + pb[0] + pc[0]) / 3.0
         cy = (pa[1] + pb[1] + pc[1]) / 3.0
         cz = (pa[2] + pb[2] + pc[2]) / 3.0
         zs.append(cz)
-        centroids.append((cx, cy, f.energy_sum, f.lp_db))
+        centroids.append((cx, cy, f.energy_sum, cz))
     if not centroids:
         return None
-    xs = [c[0] for c in centroids]
-    ys = [c[1] for c in centroids]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
-    span_x = max(max_x - min_x, 1e-3)
-    span_y = max(max_y - min_y, 1e-3)
-    # Infer cell size from nearest-neighbor spacing (median of positive deltas).
-    uniq_x = sorted(set(round(x, 4) for x in xs))
-    uniq_y = sorted(set(round(y, 4) for y in ys))
-    dxs = [uniq_x[i + 1] - uniq_x[i] for i in range(len(uniq_x) - 1) if uniq_x[i + 1] > uniq_x[i]]
-    dys = [uniq_y[i + 1] - uniq_y[i] for i in range(len(uniq_y) - 1) if uniq_y[i + 1] > uniq_y[i]]
-    cell = 0.5
-    if dxs:
-        cell = min(cell, sorted(dxs)[len(dxs) // 2])
-    if dys:
-        cell = min(cell, sorted(dys)[len(dys) // 2])
-    cell = max(cell, 0.05)
-    nx = max(1, int(math.ceil(span_x / cell)) + 1)
-    ny = max(1, int(math.ceil(span_y / cell)) + 1)
-    # Cap grid size for mobile UI
-    while nx * ny > 80_000 and cell < 5.0:
-        cell *= 1.5
-        nx = max(1, int(math.ceil(span_x / cell)) + 1)
-        ny = max(1, int(math.ceil(span_y / cell)) + 1)
+
+    # Node lattice = true coupe cell pitch (not triangle-centroid pitch).
+    node_xs = sorted({round(n[0], 5) for n in nodes})
+    node_ys = sorted({round(n[1], 5) for n in nodes})
+    use_lattice = len(node_xs) >= 2 and len(node_ys) >= 2
+    if use_lattice:
+        dxs = [node_xs[i + 1] - node_xs[i] for i in range(len(node_xs) - 1)]
+        dys = [node_ys[i + 1] - node_ys[i] for i in range(len(node_ys) - 1)]
+        cell_x = max(sorted(dxs)[len(dxs) // 2], 1e-4)
+        cell_y = max(sorted(dys)[len(dys) // 2], 1e-4)
+        min_x, min_y = node_xs[0], node_ys[0]
+        nx = len(node_xs) - 1
+        ny = len(node_ys) - 1
+        source = "rsbin_coupe_lattice"
+    else:
+        xs = [c[0] for c in centroids]
+        ys = [c[1] for c in centroids]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        span_x = max(max_x - min_x, 1e-3)
+        span_y = max(max_y - min_y, 1e-3)
+        uniq_x = sorted({round(x, 4) for x in xs})
+        uniq_y = sorted({round(y, 4) for y in ys})
+        dxs = [
+            uniq_x[i + 1] - uniq_x[i]
+            for i in range(len(uniq_x) - 1)
+            if uniq_x[i + 1] > uniq_x[i]
+        ]
+        dys = [
+            uniq_y[i + 1] - uniq_y[i]
+            for i in range(len(uniq_y) - 1)
+            if uniq_y[i + 1] > uniq_y[i]
+        ]
+        # Prefer larger median so triangle-pair half-steps do not stripe.
+        cell = 0.5
+        if dxs:
+            cell = max(cell, sorted(dxs)[len(dxs) // 2])
+        if dys:
+            cell = max(cell, sorted(dys)[len(dys) // 2])
+        cell = max(min(cell, 5.0), 0.05)
+        cell_x = cell_y = cell
+        nx = max(1, int(math.ceil(span_x / cell_x)))
+        ny = max(1, int(math.ceil(span_y / cell_y)))
+        source = "rsbin_face_centroids"
+
+    while nx * ny > 80_000 and (cell_x < 5.0 or cell_y < 5.0):
+        cell_x = min(cell_x * 1.5, 5.0)
+        cell_y = min(cell_y * 1.5, 5.0)
+        if use_lattice:
+            nx = max(1, int(math.ceil((node_xs[-1] - node_xs[0]) / cell_x)))
+            ny = max(1, int(math.ceil((node_ys[-1] - node_ys[0]) / cell_y)))
+        else:
+            nx = max(1, int(math.ceil(span_x / cell_x)))
+            ny = max(1, int(math.ceil(span_y / cell_y)))
+
     energy = [0.0] * (nx * ny)
     counts = [0] * (nx * ny)
-    for cx, cy, e, _lp in centroids:
-        i = min(nx - 1, max(0, int((cx - min_x) / cell)))
-        j = min(ny - 1, max(0, int((cy - min_y) / cell)))
+    for cx, cy, e, _cz in centroids:
+        i = min(nx - 1, max(0, int((cx - min_x) / cell_x)))
+        j = min(ny - 1, max(0, int((cy - min_y) / cell_y)))
         idx = j * nx + i
         energy[idx] += e
         counts[idx] += 1
@@ -249,18 +287,18 @@ def _faces_to_grid(
         else:
             lp_db.append(energy_sum_to_lp(energy[idx]))
     z_m = sum(zs) / len(zs) if zs else 1.5
-    any_lp = any(v is not None for v in lp_db)
-    if not any_lp:
+    if not any(v is not None for v in lp_db):
         return None
     return {
         "originX": min_x,
         "originY": min_y,
-        "cellSizeM": cell,
+        "cellSizeM": cell_x,
+        "cellSizeYM": cell_y,
         "nx": nx,
         "ny": ny,
         "zM": z_m,
         "lpDb": lp_db,
         "quantity": "Lp_dB",
         "unit": "dB",
-        "source": "rsbin_face_centroids",
+        "source": source,
     }

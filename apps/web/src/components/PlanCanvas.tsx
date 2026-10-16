@@ -457,12 +457,12 @@ export function PlanCanvas(_props: PlanCanvasProps) {
               y={
                 transform.offsetY -
                 (planSurfaceMap.originY +
-                  planSurfaceMap.ny * planSurfaceMap.cellSizeM) *
+                  planSurfaceMap.ny * planSurfaceMap.cellSizeYM) *
                   transform.scale
               }
               width={planSurfaceMap.nx * planSurfaceMap.cellSizeM * transform.scale}
               height={
-                planSurfaceMap.ny * planSurfaceMap.cellSizeM * transform.scale
+                planSurfaceMap.ny * planSurfaceMap.cellSizeYM * transform.scale
               }
               listening={false}
               opacity={0.85}

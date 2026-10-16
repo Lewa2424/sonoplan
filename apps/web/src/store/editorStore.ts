@@ -64,6 +64,8 @@ export interface PlanSurfaceMapOverlay {
   readonly originX: number;
   readonly originY: number;
   readonly cellSizeM: number;
+  /** Pitch along Y; defaults to cellSizeM when omitted (square cells). */
+  readonly cellSizeYM: number;
   readonly nx: number;
   readonly ny: number;
   /** row-major; null = нет энергии (не 0 дБ). */
@@ -164,6 +166,7 @@ interface EditorState {
       originX: number;
       originY: number;
       cellSizeM: number;
+      cellSizeYM?: number;
       nx: number;
       ny: number;
       zM?: number;
@@ -882,6 +885,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       set({ planSurfaceMap: null });
       return;
     }
+    const cellY =
+      typeof grid.cellSizeYM === "number" && grid.cellSizeYM > 0
+        ? grid.cellSizeYM
+        : grid.cellSizeM;
     set({
       planSurfaceMap: {
         jobId,
@@ -890,6 +897,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         originX: grid.originX,
         originY: grid.originY,
         cellSizeM: grid.cellSizeM,
+        cellSizeYM: cellY,
         nx: grid.nx,
         ny: grid.ny,
         lpDb: [...grid.lpDb],
