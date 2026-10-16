@@ -43,7 +43,7 @@
 ## Что ещё не закрыто
 
 - Полный перечень зависимостей Boost / системных библиотек Linux runner / контейнера и их лицензий (SBOM) — после первой успешной сборки.
-- SHA-256 бинарника SPPS в `engine/PINNED.json` (`binary_checksum`) — после GitHub Actions / `build-spps-native.sh`.
+- SHA-256 бинарника SPPS в `engine/PINNED.json` (`binary_checksum`) — pinned от CI run `38867272211` (см. `docs/spps-ci-artifact.md`).
 - Digest образа Docker (`image_checksum`) — только если используется optional Docker Engine на Linux; не обязателен для primary CI path.
 - При распространении CI-артефакта SPPS — Corresponding Source и GPLv3 (см. выше).
 - Пользовательские проекты и секреты **не** входят в публикуемый исходный код (LIC-002).

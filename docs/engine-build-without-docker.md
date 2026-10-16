@@ -15,12 +15,18 @@
 
 ## A) GitHub Actions
 
-1. Создать репозиторий на GitHub и добавить remote (сейчас в workspace git remote может отсутствовать).
-2. Запушить ветку с `engine/` и `.github/workflows/build-spps.yml`.
-3. Actions → **Build SPPS** → **Run workflow** (`workflow_dispatch`), либо push в пути `engine/**` / workflow-файл.
-4. Скачать artifact `spps-linux-x86_64-<12 hex>`: `spps`, `ORIGIN.txt`, `SHA256SUMS`, `.tar.gz`.
-5. Записать SHA-256 из `SHA256SUMS` в `engine/PINNED.json` → `binary_checksum` после проверки.
-6. (Опционально) положить бинарник на Linux-хост worker’а; Windows-хост UI/API бинарник для расчёта не запускает.
+1. Репозиторий: `Lewa2424/sonoplan` (remote уже есть).
+2. Actions → **Build SPPS** → **Run workflow** (`workflow_dispatch`), либо push в пути workflow/`engine/**`.
+3. Скачать artifact (бинарник **не** в git — каталог `engine/binaries/` в `.gitignore`):
+
+```bash
+gh run download 38867272211 --repo Lewa2424/sonoplan -D engine/binaries/spps-ci/
+```
+
+Полная инструкция и checksum: [`docs/spps-ci-artifact.md`](spps-ci-artifact.md).
+
+4. Сверить SHA-256 с `engine/PINNED.json` → `binary_checksum` (уже заполнен для run `38867272211`).
+5. На Linux-хосте worker’а: `export SPPS_BIN=/path/to/spps`. Windows-хост UI/API Linux-бинарник не запускает.
 
 Workflow на runner `ubuntu-22.04`: clone pinned I-Simpa → `cmake -DSKIPISIMPA=ON` → artifact. Не путать с `-DLIBSIMPA_ONLY=ON` (ENG-002).
 
@@ -70,13 +76,14 @@ cd engine
 
 ## После первого артефакта
 
-1. Заполнить `binary_checksum` (и при docker-на-VPS — `image_checksum`) в `PINNED.json`.
+1. ~~Заполнить `binary_checksum`~~ — сделано (run `38867272211`, см. `PINNED.json` / `spps-ci-artifact.md`).
 2. Положить реальные mesh/XML в `engine/fixtures/minimal_room/inputs`.
-3. Прогон `./scripts/run-spps-fixture.sh` на Linux-хосте с бинарником.
-4. STG-02+ на Windows продолжается независимо (API/web без SPPS).
+3. Прогон `./scripts/run-spps-fixture.sh` на Linux-хосте с `SPPS_BIN` (не на Windows).
+4. STG-02+ на Windows продолжается независимо (API/web без SPPS); STG-04 — worker на Linux с путём к бинарнику.
 
 ## Связанные файлы
 
+- `docs/spps-ci-artifact.md` — download pinned run + checksum
 - `engine/scripts/build-spps-native.sh` — native Linux
 - `engine/scripts/build-spps.sh` — Docker (optional на Linux)
 - `.github/workflows/build-spps.yml` — CI

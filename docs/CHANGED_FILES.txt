@@ -34,11 +34,15 @@ docs/CHANGED_FILES.txt
 docs/GITHUB_REMOTE.md
 docs/engine-build-without-docker.md
 docs/engine-licenses.md
+docs/spps-ci-artifact.md
 engine/BUILD_STATUS.md
 engine/Dockerfile
 engine/PINNED.json
 engine/README.md
+engine/.gitignore
 engine/adapter/.gitkeep
+engine/adapter/README.md
+engine/adapter/sonoplan_adapter/runner.py
 engine/fixtures/.gitkeep
 engine/patches/.gitkeep
 engine/scripts/build-spps-native.sh

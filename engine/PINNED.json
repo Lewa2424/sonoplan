@@ -20,10 +20,19 @@
   },
   "primary_build_path": "github_actions_or_remote_linux",
   "local_docker_desktop": "blocked",
-  "binary_checksum": null,
-  "binary_checksum_note": "SHA-256 of engine/dist/spps from build-spps-native.sh / GitHub Actions artifact. Filled after first successful Linux build.",
+  "binary_checksum": "c5e30a7b1647ed73b26aae58815914a55cc1785223f954ba7e12b3eda0234eb5",
+  "binary_checksum_note": "SHA-256 of Linux x86_64 `spps` from GitHub Actions artifact (not Windows). Do not execute on Windows host.",
+  "binary_artifact": {
+    "github_repo": "Lewa2424/sonoplan",
+    "github_run_id": "38867272211",
+    "github_run_url": "https://github.com/Lewa2424/sonoplan/actions/runs/38867272211",
+    "artifact_name": "spps-linux-x86_64-929a5c8e5f59",
+    "pinned_at": "2026-10-16",
+    "local_path_hint": "engine/binaries/spps-ci/spps-linux-x86_64-929a5c8e5f59/spps",
+    "download_doc": "docs/spps-ci-artifact.md"
+  },
   "image_checksum": null,
   "image_checksum_note": "Digest of sonoplan-spps image is filled only if Docker Engine on Linux is used (optional). Not required for primary CI path.",
-  "build_status": "NOT_RUN",
-  "build_blocker": "Local Docker Desktop blocked (Windows 10.0.19044, OS update unavailable). Primary path: GitHub Actions (.github/workflows/build-spps.yml) or remote Linux VPS with build-spps-native.sh. No SPPS artifact yet. Verified/updated 2026-10-16."
+  "build_status": "CI_SUCCESS",
+  "build_blocker": null
 }

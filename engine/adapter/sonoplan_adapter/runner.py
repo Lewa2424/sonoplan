@@ -43,8 +43,10 @@ def run_spps(request: SppsRunRequest) -> SppsRunResult:
     env.setdefault("LANG", "C")
 
     argv = request.argv()
-    # Replace executable name with absolute path if provided as path.
+    # Default name "spps" resolves via SPPS_BIN (request.env, then process env).
     exe = request.spps_executable
+    if exe == "spps":
+        exe = request.env.get("SPPS_BIN") or os.environ.get("SPPS_BIN") or exe
     cmd = [exe, *argv[1:]]
 
     t0 = time.perf_counter()

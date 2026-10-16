@@ -13,7 +13,7 @@
 
 | Путь | Статус |
 |------|--------|
-| **GitHub Actions** (`.github/workflows/build-spps.yml`) | Готов в репо; нужен git remote + запуск |
+| **GitHub Actions** (`.github/workflows/build-spps.yml`) | **SUCCESS** run [38867272211](https://github.com/Lewa2424/sonoplan/actions/runs/38867272211); checksum в `PINNED.json` |
 | **Remote Linux VPS/VM** (`engine/scripts/build-spps-native.sh`) | Документирован; нужен доступ к VPS |
 | Docker Engine на Linux VPS (`build-spps.sh`) | Optional, не Desktop |
 | Локальный Docker Desktop | **blocked** |
@@ -39,18 +39,19 @@ CommandNotFoundException
 
 ### Сборка SPPS / прогон эталона
 
-**Не запускались** на этом хосте — нет Docker Desktop и нет готового Linux runner.  
-CI workflow и native-скрипт **добавлены**, но артефакт бинарника ещё не получен.
+- CI native Linux: **SUCCESS** (run `38867272211`); artifact скачан локально в `engine/binaries/spps-ci/` (gitignored).
+- SHA-256 `spps`: `c5e30a7b1647ed73b26aae58815914a55cc1785223f954ba7e12b3eda0234eb5` → `PINNED.json`.
+- Прогон эталона на этом Windows-хосте **не выполняется** (Linux ELF). Нужен Linux worker/VPS + `SPPS_BIN` + fixtures inputs.
 
 ### Адаптер (без бинарника SPPS)
 
-Unit-тесты валидации выходов — OK без Docker (см. отчёт worker / adapter).
+Unit-тесты валидации выходов — OK без Docker. `SPPS_BIN` — см. `engine/adapter/README.md`.
 
-## Блокер до первого артефакта SPPS
+## Осталось для полного STG-01 / stub STG-04
 
-1. Нет выполненной Linux-сборки (нужен GitHub remote + Actions **или** Ubuntu VPS).
-2. Локальный `git clone` I-Simpa в этот workspace блокировался Cursor Hooks; clone выполняется в CI/VPS / в Docker-на-Linux.
-3. ENG-002 (сборка) и эталонный прогон закрываются только после artifact + inputs fixtures.
+1. ~~Linux-сборка + `binary_checksum`~~ — готово.
+2. Заполнить `fixtures/minimal_room/inputs` и прогнать эталон на Linux с `SPPS_BIN`.
+3. Worker: выставлять `SPPS_BIN` на Linux CI/VPS (не запускать бинарник на Windows).
 
 **Не блокер для STG-02:** web/API каркас на Windows без SPPS.
 
@@ -60,9 +61,8 @@ Unit-тесты валидации выходов — OK без Docker (см. о
 - Адаптер отклоняет `exit_code=0` без выходных файлов (4 unit-теста OK; CLI broken_exit0 → exit 1).
 - Закреплён SHA I-Simpa и флаги CMake в `PINNED.json`.
 
-## Следующий шаг после появления Linux runner
+## Следующий шаг
 
-1. Запустить `Build SPPS` (Actions) или `./engine/scripts/build-spps-native.sh` на VPS.
-2. Скачать artifact; сверить `SHA256SUMS`.
-3. Записать `binary_checksum` в `PINNED.json`.
-4. Заполнить `fixtures/minimal_room/inputs` и прогнать эталон на Linux.
+1. Download: см. [`docs/spps-ci-artifact.md`](../docs/spps-ci-artifact.md).
+2. На Linux: `export SPPS_BIN=.../spps`, fixtures inputs, `./scripts/run-spps-fixture.sh`.
+3. Подключить worker → adapter с `SPPS_BIN` (STG-04).

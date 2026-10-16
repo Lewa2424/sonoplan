@@ -44,7 +44,7 @@ temp/
 # Docker volumes (local)
 infra/data/
 
-# Local SPPS / I-Simpa heavy artifacts (keep engine/scripts, workflows, sources)
+# Local SPPS / I-Simba heavy artifacts (keep engine/scripts, workflows, sources)
 # engine/.gitignore also covers adapter-local builds; root reinforces common cases.
 *.exe
 *.dll
@@ -57,5 +57,7 @@ engine/out/
 engine/.cache/
 engine/isimpa/
 engine/I-Simpa/
+engine/binaries/
+engine/dist/
 **/spps_bin/
 **/isimpa_build/

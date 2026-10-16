@@ -11,9 +11,15 @@
 
 ## Сейчас
 
-Только каркас `sonoplan_worker.celery_app`. **Adapter и SPPS ещё не подключены** (STG-01 / STG-04).
+Только каркас `sonoplan_worker.celery_app`. **Adapter и SPPS ещё не подключены** (STG-04).
 
-Не генерировать фиктивные акустические карты в worker.
+Linux SPPS artifact уже собран в CI; checksum в `engine/PINNED.json`. На Linux-хосте worker’а:
+
+```bash
+export SPPS_BIN=/path/to/spps   # см. docs/spps-ci-artifact.md и engine/adapter/README.md
+```
+
+Бинарник Linux на Windows-хосте разработчика не запускать. Не генерировать фиктивные акустические карты в worker.
 
 ## Локальный запуск (после поднятия broker)
 

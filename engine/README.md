@@ -11,8 +11,10 @@
 | `fixtures/` | Эталонные входы/выходы и регрессия broken_exit0 |
 | `scripts/` | fetch / build (Docker + native) / run / check-env |
 | `Dockerfile` | Linux-сборка SPPS в образе (`SKIPISIMPA=ON`) — optional на Linux VPS |
-| `PINNED.json` | Закреплённый commit I-Simpa + статус сборки |
+| `PINNED.json` | Закреплённый commit I-Simpa + `binary_checksum` + CI run |
+| `binaries/` | Локальный download CI artifact (**gitignored**) |
 | `../.github/workflows/build-spps.yml` | **Primary:** CI-сборка на Linux runner |
+| `../docs/spps-ci-artifact.md` | Как скачать pinned artifact + checksum |
 | `../docs/engine-build-without-docker.md` | CI / remote VPS / оценка Windows native |
 
 ## Pinned I-Simpa
@@ -56,7 +58,7 @@ docker build \
 
 CMake: `-DSKIPISIMPA=ON` (без GUI). **Не** путать с `-DLIBSIMPA_ONLY=ON` — это не сборка SPPS (ENG-002).
 
-После успеха: записать SHA-256 бинарника в `PINNED.json` → `binary_checksum` (и digest образа → `image_checksum`, если собирали Docker на Linux).
+Pinned checksum: `PINNED.json` → `binary_checksum` (run `38867272211`). Digest образа → `image_checksum` только если собирали Docker на Linux.
 
 ### Native Windows MSVC/MinGW
 
@@ -93,9 +95,9 @@ STG-02+ (web/API) на Windows продолжается **без** локаль�
 
 - Docker Desktop: **blocked** (ОС 19044, обновление недоступно)
 - WSL: ядро/сообщение об обновлении; **рабочий Linux-дистрибутив для сборки не готов**
-- Primary path: **GitHub Actions / remote Linux** (не локальный Docker Desktop)
-- Локальный `git clone` I-Simpa в workspace: **заблокирован** Cursor Hooks; pin SHA взят из GitHub API; clone — в CI/VPS или внутри `Dockerfile` на Linux
-- Сборка SPPS и прогон эталона: **не выполнены** (нет Linux runner / артефакта)
+- Primary path: **GitHub Actions** — run `38867272211` SUCCESS; checksum в `PINNED.json`
+- Artifact download: [`docs/spps-ci-artifact.md`](../docs/spps-ci-artifact.md) → `engine/binaries/` (не в git)
+- Linux-бинарник на Windows **не запускать**; worker: `SPPS_BIN` на Linux CI/VPS
 - Unit-тесты валидации выходов адаптера: **4/4 OK** без Docker
 
-Следующий шаг: git remote → GitHub Actions `Build SPPS` (или Ubuntu VPS + `build-spps-native.sh`) → artifact → `binary_checksum` в `PINNED.json` → fixtures inputs → прогон на Linux.
+Следующий шаг: fixtures inputs → прогон на Linux с `SPPS_BIN` → STG-04 worker path.
