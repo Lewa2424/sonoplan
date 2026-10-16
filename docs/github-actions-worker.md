@@ -7,20 +7,20 @@
 - Публичный репозиторий + standard GitHub-hosted runners → **минуты Actions бесплатны** ([документация GitHub](https://docs.github.com/en/billing/concepts/product-billing/github-actions)).
 - Приватный репо: лимит минут по плану (Free ≈ 2000/мес) — не целевой путь для фри-продукта.
 
-## Что делает Phase 1
+## Что делает worker
 
 1. API (`SONOPLAN_JOBS_BACKEND=github_actions`) при `POST /jobs` вызывает `workflow_dispatch` для `.github/workflows/run-spps-product-job.yml`.
-2. Runner `ubuntu-22.04` скачивает pinned `spps`, гоняет **живой** SPPS.
-3. Пишет `result_manifest.json` + `job_status.json` в artifact `sonoplan-job-{jobId}`.
-4. `GET /api/v1/jobs/{id}` синхронизирует статус и подтягивает artifact (публичный callback URL **не нужен** — подходит localhost API).
+2. Передаёт `export_json` (коробка AABB комнаты + источники/РМ из ревизии) — **Phase 2A**.
+3. Runner `ubuntu-22.04` строит `mesh.cbin`/`tetramesh.mbin`/`config.xml`, гоняет **живой** SPPS.
+4. Пишет `result_manifest.json` + `job_status.json` в artifact `sonoplan-job-{jobId}`.
+5. `GET /api/v1/jobs/{id}` синхронизирует статус и подтягивает artifact (публичный callback URL **не нужен**).
 
-### Честность Phase 1
+### Честность
 
-Геометрия пока `engine/fixtures/minimal_room`, **не** экспорт вашей ревизии.  
-Это не `fixture_replay` (decode на Windows): на Actions реально запускается Linux SPPS.  
-`executionMode`: `github_actions_pending` → `github_actions_spps`.
-
-Phase 2 (отдельно): адаптер model/revision → mesh/config → тот же workflow.
+- Phase 2A: **AABB-коробка** по контуру (прямоугольник — точно; L/многоугольник — оболочка), не полный экструд + TetGen.
+- Без `export_json` — fallback на fixture `minimal_room` (Phase 1).
+- Это не Windows `fixture_replay`: на Actions реально запускается Linux SPPS.
+- `executionMode`: `github_actions_pending` → `github_actions_spps`.
 
 ## Настройка API (локально / Neon)
 

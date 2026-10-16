@@ -1,9 +1,9 @@
 # Product calculation worker (free path): GitHub-hosted Linux runs SPPS.
-# Triggered by API workflow_dispatch with jobId / revisionId / snapshotHash.
+# Triggered by API workflow_dispatch with jobId / revisionId / snapshotHash
+# and optional export_json (Phase 2A: room AABB box + sources/workplaces).
 #
-# Phase 1 honesty: workdir is still engine/fixtures/minimal_room (no model→mesh
-# export yet). This IS a live Linux SPPS process — not Windows fixture_replay.
-# Do not invent heatmaps / dB. Public repo → $0 Actions minutes on standard runners.
+# Without export_json falls back to fixture minimal_room (Phase 1 demo).
+# Live Linux SPPS — not Windows fixture_replay. No invented heatmaps.
 
 name: Run SPPS Product Job
 
@@ -24,6 +24,11 @@ on:
         description: Revision snapshotHash (64 hex)
         required: true
         type: string
+      export_json:
+        description: Compact revision export (box + sources + workplaces)
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: sonoplan-product-job-${{ inputs.job_id }}
@@ -160,6 +165,59 @@ jobs:
           PY
           exit 1
 
+      - name: Build SPPS workdir from export_json (or fixture fallback)
+        id: workdir
+        env:
+          EXPORT_JSON: ${{ inputs.export_json }}
+        working-directory: engine/adapter
+        run: |
+          set -euo pipefail
+          WORK="../../ci-product-job/workdir"
+          mkdir -p "$WORK"
+          python3 <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, ".")
+          from sonoplan_adapter.export_revision import write_spps_workdir
+
+          work = Path("../../ci-product-job/workdir")
+          fixture = Path("../fixtures/minimal_room/inputs")
+          raw = os.environ.get("EXPORT_JSON") or ""
+          mode = "fixture"
+          if raw.strip():
+              payload = json.loads(raw)
+              meta = write_spps_workdir(
+                  payload=payload,
+                  out_dir=work,
+                  fixture_inputs=fixture,
+              )
+              mode = "export_box"
+              Path("../../ci-product-job/out").mkdir(parents=True, exist_ok=True)
+              Path("../../ci-product-job/out/export_meta.json").write_text(
+                  json.dumps({
+                      "mode": mode,
+                      "widthM": meta.width_m,
+                      "depthM": meta.depth_m,
+                      "heightM": meta.height_m,
+                      "exactRectangle": meta.exact_rectangle,
+                      "sourceCount": meta.source_count,
+                      "workplaceCount": meta.workplace_count,
+                      "notes": list(meta.notes),
+                  }, indent=2),
+                  encoding="utf-8",
+              )
+              print("export_box", meta)
+          else:
+              for name in ("config.xml", "mesh.cbin", "tetramesh.mbin", "speaker-test3.txt"):
+                  shutil.copy2(fixture / name, work / name)
+              print("fixture fallback")
+          print(f"workdir_mode={mode}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"mode={mode}\n")
+              fh.write(f"path={work.resolve()}\n")
+          PY
+
       - name: attempt-run + decode ResultManifest
         env:
           SPPS_BIN: ${{ steps.bin.outputs.path }}
@@ -169,10 +227,12 @@ jobs:
           JOB_ID="${{ inputs.job_id }}"
           REV_ID="${{ inputs.revision_id }}"
           SNAP="${{ inputs.snapshot_hash }}"
+          MODE="${{ steps.workdir.outputs.mode }}"
+          WORK="../../ci-product-job/workdir"
           OUT="../../ci-product-job/out"
           mkdir -p "$OUT"
           set +e
-          python -m sonoplan_adapter.cli attempt-run ../fixtures/minimal_room/inputs \
+          python -m sonoplan_adapter.cli attempt-run "$WORK" \
             --required-input config.xml \
             --required-input mesh.cbin \
             --required-input tetramesh.mbin \
@@ -181,7 +241,7 @@ jobs:
           CODE=$?
           set -e
           echo "attempt_exit=$CODE" | tee "$OUT/attempt_exit.txt"
-          python -m sonoplan_adapter.cli decode-outputs ../fixtures/minimal_room/inputs \
+          python -m sonoplan_adapter.cli decode-outputs "$WORK" \
             --job-id "$JOB_ID" \
             --revision-id "$REV_ID" \
             --snapshot-hash "$SNAP" \
@@ -209,14 +269,27 @@ jobs:
                   "punctualReceivers": [],
               }
           notes = list(man.get("notes") or [])
-          phase = (
-              "GitHub Actions Linux SPPS (free worker). "
-              "Phase 1: geometry is still engine/fixtures/minimal_room — "
-              "not yet exported from this revision's mesh. "
-              "Live SPPS process on ubuntu-22.04; not Windows fixture_replay decode."
-          )
+          mode = "$MODE"
+          if mode == "export_box":
+              phase = (
+                  "GitHub Actions Linux SPPS (free worker). "
+                  "Phase 2A: room AABB box mesh + revision sources/workplaces. "
+                  "Not full polygon extrusion / TetGen yet."
+              )
+          else:
+              phase = (
+                  "GitHub Actions Linux SPPS (free worker). "
+                  "Phase 1 fallback: engine/fixtures/minimal_room (no export_json)."
+              )
           if phase not in notes:
               notes.insert(0, phase)
+          meta_path = out / "export_meta.json"
+          if meta_path.is_file():
+              meta = json.loads(meta_path.read_text(encoding="utf-8"))
+              for n in meta.get("notes") or []:
+                  if n not in notes:
+                      notes.append(n)
+              man["exportMeta"] = meta
           man["notes"] = notes
           man["executionMode"] = "github_actions_spps"
           man["mapAvailable"] = False

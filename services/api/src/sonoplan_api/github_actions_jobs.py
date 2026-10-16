@@ -143,6 +143,7 @@ def dispatch_product_job(
     job_id: str,
     revision_id: str,
     snapshot_hash: str,
+    export_json: str = "",
 ) -> dict[str, Any]:
     """Trigger workflow_dispatch. Returns github meta or raises RuntimeError."""
     cfg = github_config()
@@ -155,21 +156,30 @@ def dispatch_product_job(
     if not owner or not name:
         raise RuntimeError(f"Invalid GITHUB_REPOSITORY: {cfg['repo']}")
 
+    # GitHub workflow_dispatch input size is limited (~100 KiB practical).
+    if len(export_json) > 90_000:
+        raise RuntimeError(
+            f"export_json too large ({len(export_json)} chars) for workflow_dispatch"
+        )
+
     path = (
         f"/repos/{owner}/{name}/actions/workflows/"
         f"{urllib.parse.quote(cfg['workflow'])}/dispatches"
     )
+    inputs: dict[str, str] = {
+        "job_id": job_id,
+        "revision_id": revision_id,
+        "snapshot_hash": snapshot_hash,
+    }
+    if export_json:
+        inputs["export_json"] = export_json
     code, payload = _api_request(
         "POST",
         path,
         token=cfg["token"],
         body={
             "ref": cfg["ref"],
-            "inputs": {
-                "job_id": job_id,
-                "revision_id": revision_id,
-                "snapshot_hash": snapshot_hash,
-            },
+            "inputs": inputs,
         },
     )
     if code not in (204, 200):
@@ -222,6 +232,8 @@ def _find_run_id(
 
 
 def enqueue_github_actions_job(db: Session, job: JobRow) -> JobRow:
+    from sonoplan_api.models import RevisionRow
+
     job.status = "queued"
     job.updated_at = _utcnow()
     job.result_manifest = pending_manifest(
@@ -234,11 +246,48 @@ def enqueue_github_actions_job(db: Session, job: JobRow) -> JobRow:
     db.commit()
     db.refresh(job)
 
+    export_json = ""
     try:
+        revision = db.get(RevisionRow, job.revision_id)
+        if revision is None:
+            raise RuntimeError(f"Revision {job.revision_id} not found")
+        # Adapter lives under engine/adapter — add to path like job_execution.
+        import sys
+        from pathlib import Path
+
+        adapter_root = Path(__file__).resolve().parents[4] / "engine" / "adapter"
+        if adapter_root.is_dir() and str(adapter_root) not in sys.path:
+            sys.path.insert(0, str(adapter_root))
+        from sonoplan_adapter.export_revision import compact_export_payload
+
+        payload = compact_export_payload(revision.snapshot)
+        export_json = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+        man = dict(job.result_manifest or {})
+        notes = list(man.get("notes") or [])
+        notes.insert(
+            0,
+            "Phase 2A export: room AABB box + revision sources/workplaces → Actions SPPS.",
+        )
+        if not payload.get("box", {}).get("exactRectangle", True):
+            notes.insert(
+                1,
+                "Contour is not an axis-aligned rectangle — AABB used (not full polygon).",
+            )
+        man["notes"] = notes
+        man["exportSummary"] = {
+            "box": payload.get("box"),
+            "sourceCount": len(payload.get("sources") or []),
+            "workplaceCount": len(payload.get("workplaces") or []),
+        }
+        job.result_manifest = man
+        db.commit()
+        db.refresh(job)
+
         meta = dispatch_product_job(
             job_id=job.id,
             revision_id=job.revision_id,
             snapshot_hash=job.snapshot_hash,
+            export_json=export_json,
         )
     except Exception as exc:  # noqa: BLE001 — surface config/API errors on job
         job.status = "failed"
@@ -343,7 +392,7 @@ def sync_github_actions_job(db: Session, job: JobRow) -> JobRow:
         db.refresh(job)
         return job
 
-    # Terminal on GitHub — pull artifact.
+    # Terminal on GitHub — pull artifact (may lag a few seconds after success).
     artifact = _download_job_artifact(
         token=cfg["token"],
         repo=cfg["repo"],
@@ -351,19 +400,18 @@ def sync_github_actions_job(db: Session, job: JobRow) -> JobRow:
         job_id=job.id,
     )
     if artifact is None:
-        job.status = "failed"
-        job.error_code = "GITHUB_ACTIONS_ARTIFACT_MISSING"
-        job.error_message = (
-            f"Workflow finished ({conclusion}) but artifact "
-            f"sonoplan-job-{job.id} was not found"
-        )
-        job.finished_at = _utcnow()
-        job.updated_at = job.finished_at
-        man["executionMode"] = "github_actions_failed"
+        # Keep running so the next GET retries; do not fail on first miss.
+        gh["artifactPending"] = True
+        man["github"] = gh
         job.result_manifest = man
+        if job.status == "queued":
+            job.status = "running"
+            job.started_at = job.started_at or _utcnow()
+        job.updated_at = _utcnow()
         db.commit()
         db.refresh(job)
         return job
+    gh.pop("artifactPending", None)
 
     status_doc = artifact.get("job_status") or {}
     result_man = artifact.get("result_manifest")
@@ -433,10 +481,54 @@ def _download_job_artifact(
     if not isinstance(art_id, int):
         return None
 
-    # Artifact download follows redirects to ZIP bytes.
-    url = f"https://api.github.com/repos/{owner}/{name}/actions/artifacts/{art_id}/zip"
+    # Artifact ZIP: GitHub 302 → blob storage. Do NOT send Authorization on
+    # the second hop (Azure rejects the GitHub Bearer and urllib would fail).
+    zip_url = (
+        f"https://api.github.com/repos/{owner}/{name}/actions/artifacts/"
+        f"{art_id}/zip"
+    )
+    zip_bytes = _download_github_artifact_zip(zip_url, token=token)
+    if zip_bytes is None:
+        return None
+
+    result: dict[str, Any] = {}
+    try:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            for info in zf.infolist():
+                base = info.filename.replace("\\", "/").split("/")[-1]
+                if base == "result_manifest.json":
+                    result["result_manifest"] = json.loads(
+                        zf.read(info).decode("utf-8")
+                    )
+                elif base == "job_status.json":
+                    result["job_status"] = json.loads(
+                        zf.read(info).decode("utf-8")
+                    )
+    except (zipfile.BadZipFile, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not result:
+        return None
+    return result
+
+
+def _download_github_artifact_zip(api_zip_url: str, *, token: str) -> bytes | None:
+    """GET artifact zip; strip Authorization when following off-github redirects."""
+
+    class _StripAuthRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+            new_req = super().redirect_request(req, fp, code, msg, headers, newurl)
+            if new_req is None:
+                return None
+            host = urllib.parse.urlparse(newurl).netloc.lower()
+            if "api.github.com" not in host:
+                for h in ("Authorization", "authorization"):
+                    if h in new_req.headers:
+                        del new_req.headers[h]
+            return new_req
+
+    opener = urllib.request.build_opener(_StripAuthRedirect)
     req = urllib.request.Request(
-        url,
+        api_zip_url,
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
@@ -446,21 +538,9 @@ def _download_job_artifact(
         method="GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            zip_bytes = resp.read()
+        with opener.open(req, timeout=120) as resp:
+            return resp.read()
     except urllib.error.HTTPError:
         return None
-
-    result: dict[str, Any] = {}
-    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        for info in zf.infolist():
-            base = info.filename.replace("\\", "/").split("/")[-1]
-            if base == "result_manifest.json":
-                result["result_manifest"] = json.loads(
-                    zf.read(info).decode("utf-8")
-                )
-            elif base == "job_status.json":
-                result["job_status"] = json.loads(zf.read(info).decode("utf-8"))
-    if not result:
+    except urllib.error.URLError:
         return None
-    return result

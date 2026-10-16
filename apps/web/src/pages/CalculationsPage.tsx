@@ -62,12 +62,16 @@ export function CalculationsPage() {
       if (appliedJobIdRef.current === next.id) return;
       appliedJobIdRef.current = next.id;
       const mode = manifest?.executionMode;
+      const exportMeta = (manifest as { exportMeta?: { mode?: string } } | null)
+        ?.exportMeta;
+      const usedBoxExport = exportMeta?.mode === "export_box";
       applyPunctualLpToWorkplaces({
         jobId: next.id,
         revisionId: next.revisionId,
-        // Phase 1 Actions still uses fixture mesh — same honesty flag as replay.
+        // Honesty: fixture/demo vs box export from revision AABB.
         fixtureReplay:
-          mode === "fixture_replay" || mode === "github_actions_spps",
+          mode === "fixture_replay" ||
+          (mode === "github_actions_spps" && !usedBoxExport),
         punctual,
       });
     },
@@ -227,10 +231,15 @@ export function CalculationsPage() {
   if (!job) {
     bannerText = ru.calculations.levelsIdle;
   } else if (hasLevels) {
+    const exportMeta = (
+      manifest as { exportMeta?: { mode?: string } } | null
+    )?.exportMeta;
     bannerText = isReplay
       ? ru.calculations.levelsReplay
       : isActions
-        ? ru.calculations.levelsActions
+        ? exportMeta?.mode === "export_box"
+          ? ru.calculations.levelsActionsBox
+          : ru.calculations.levelsActions
         : ru.calculations.levelsReady;
   } else if (isPending) {
     bannerText = ru.calculations.levelsPending;

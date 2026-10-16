@@ -36,7 +36,9 @@ export const ru = {
     levelsReplay:
       "Windows MVP: уровни с эталонного CI-прогона (fixture_replay), не локальный SPPS по вашей сетке. Карта поверхности — позже.",
     levelsActions:
-      "Linux SPPS через GitHub Actions (бесплатный worker). Phase 1: сетка всё ещё fixture minimal_room, не экспорт вашей геометрии. Карта — позже.",
+      "Linux SPPS через GitHub Actions. Если в манифесте Phase 2A — коробка по габаритам комнаты + ваши Lw/РМ; иначе fixture. Карта — позже.",
+    levelsActionsBox:
+      "Linux SPPS (Actions): коробка AABB вашей комнаты + источники/РМ из ревизии. Неполный многоугольник / TetGen — позже. Карта поверхности — позже.",
     levelsPending:
       "Расчёт в очереди GitHub Actions… Обновление при опросе статуса (обычно несколько минут).",
     levelsIdle:
@@ -70,7 +72,7 @@ export const ru = {
     revisionError: "Не удалось зафиксировать ревизию",
     revisionLabel: "Ревизия сессии",
     planOverlayOn: "Lp на плане у рабочих мест обновлены по последнему job.",
-    planOverlayReplay: "fixture_replay — эталон CI, не локальная сетка",
+    planOverlayReplay: "эталон/fixture — не полная ваша геометрия",
   },
   sync: {
     saved: "Сохранено на сервере",

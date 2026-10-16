@@ -118,6 +118,7 @@ interface EditorState {
     fixtureReplay: boolean;
     punctual: readonly {
       lpDbGlobal?: number | null;
+      receiverId?: string | null;
     }[];
   }) => void;
 }
@@ -681,10 +682,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   }) => {
     const workplaces = get().model.workplaces;
     const byWorkplaceId: Record<string, number> = {};
-    for (let i = 0; i < workplaces.length; i += 1) {
-      const wp = workplaces[i];
-      const lp = punctual[i]?.lpDbGlobal;
-      if (wp && typeof lp === "number" && Number.isFinite(lp)) {
+    const safeName = (name: string) =>
+      name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40) || "wp";
+    const used = new Set<number>();
+    for (const wp of workplaces) {
+      const idx = punctual.findIndex(
+        (p, i) =>
+          !used.has(i) &&
+          (p.receiverId === wp.name ||
+            p.receiverId === safeName(wp.name) ||
+            p.receiverId === wp.id),
+      );
+      const pick = idx >= 0 ? idx : punctual.findIndex((_, i) => !used.has(i));
+      if (pick < 0) continue;
+      used.add(pick);
+      const lp = punctual[pick]?.lpDbGlobal;
+      if (typeof lp === "number" && Number.isFinite(lp)) {
         byWorkplaceId[wp.id] = lp;
       }
     }

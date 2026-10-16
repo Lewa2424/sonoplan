@@ -138,8 +138,8 @@ def test_sync_applies_completed_artifact(monkeypatch) -> None:
             side_effect=fake_api,
         ),
         patch(
-            "sonoplan_api.github_actions_jobs.urllib.request.urlopen",
-            return_value=_Resp(),
+            "sonoplan_api.github_actions_jobs._download_github_artifact_zip",
+            return_value=zip_bytes,
         ),
     ):
         out = sync_github_actions_job(_FakeDb(), job)

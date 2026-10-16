@@ -184,3 +184,7 @@ engine/fixtures/minimal_room/expected/Punctual receivers/r_top/Sound level.recp
 docs/github-actions-worker.md
 services/api/src/sonoplan_api/github_actions_jobs.py
 services/api/tests/test_github_actions_jobs.py
+engine/adapter/sonoplan_adapter/cbin_io.py
+engine/adapter/sonoplan_adapter/mbin_io.py
+engine/adapter/sonoplan_adapter/export_revision.py
+engine/adapter/tests/test_export_revision.py

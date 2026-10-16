@@ -7,8 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# services/api/.env — does not override already-exported variables
-load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+# services/api/.env wins over stale shell env (e.g. old SONOPLAN_GITHUB_TOKEN).
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 
 def get_database_url() -> str:

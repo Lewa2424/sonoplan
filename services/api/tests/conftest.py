@@ -19,6 +19,12 @@ from sonoplan_api.main import app
 import sonoplan_api.models  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def _force_inline_jobs_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests must not hit GitHub Actions even if developer .env sets it."""
+    monkeypatch.setenv("SONOPLAN_JOBS_BACKEND", "inline")
+
+
 @pytest.fixture()
 def client():
     # Test-only SQLite — explicitly marked; not a substitute for PostgreSQL in prod.
