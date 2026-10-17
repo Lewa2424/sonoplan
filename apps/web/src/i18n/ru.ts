@@ -87,7 +87,7 @@ export const ru = {
     levelsReplay:
       "Windows MVP: уровни с эталонного CI-прогона (fixture_replay), не локальный SPPS по вашей сетке.",
     levelsActions:
-      "Linux SPPS через GitHub Actions. Phase 2A — коробка + ваши Lw/РМ/материалы.",
+      "Linux SPPS через GitHub Actions. Коробка + Lw/РМ/материалы; AABB-препятствия в mesh (Phase 3A).",
     levelsActionsBox:
       "Linux SPPS (Actions): коробка AABB + источники/РМ/материалы; AABB-препятствия вырезаются из mesh (Phase 3A).",
     levelsPending:

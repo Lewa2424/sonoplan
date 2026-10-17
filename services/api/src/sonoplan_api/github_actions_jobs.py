@@ -266,7 +266,7 @@ def enqueue_github_actions_job(db: Session, job: JobRow) -> JobRow:
         notes = list(man.get("notes") or [])
         notes.insert(
             0,
-            "Phase 2A export: room AABB box + revision sources/workplaces → Actions SPPS.",
+            "Export: room AABB box + sources/workplaces; AABB solids carved when present → Actions SPPS.",
         )
         if not payload.get("box", {}).get("exactRectangle", True):
             notes.insert(
