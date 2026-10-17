@@ -201,3 +201,10 @@ packages/domain/src/diffuseFieldEstimate.ts
 packages/domain/src/diffuseFieldEstimate.test.ts
 apps/web/src/model/surfaceMapValidity.ts
 apps/web/src/model/surfaceMapValidity.test.ts
+apps/web/src/components/NoiseScaleLegend.tsx
+packages/domain/src/aWeighting.ts
+packages/domain/src/aWeighting.test.ts
+packages/domain/src/planCut.ts
+packages/domain/src/planCut.test.ts
+engine/adapter/sonoplan_adapter/weighting.py
+engine/adapter/tests/test_weighting.py

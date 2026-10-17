@@ -3,6 +3,7 @@ import {
   stripClosingDuplicate,
   validateModel,
   type FloorVertex,
+  type LevelWeighting,
   type ModelSnapshot,
   type ProjectDraft,
   type Uuid,
@@ -16,6 +17,7 @@ import {
   patchDraft,
   validateRevision,
 } from "../api/projectsApi";
+import type { JobResponse } from "../api/types";
 import type { SolidKind } from "../model/equipmentCatalog";
 import {
   createDefaultWorkshopRoom,
@@ -29,7 +31,10 @@ import {
   workplaceNearEquipment,
 } from "../model/factoryModel";
 import { createMaterialVersionFromCatalog } from "../model/materialCatalog";
-import { surfaceGridRejectReason } from "../model/surfaceMapValidity";
+import {
+  surfaceMapFromManifest,
+  type PlanSurfaceGrid,
+} from "../model/surfaceMapValidity";
 import {
   contourVertexAngles,
   ensureClosedContour,
@@ -57,20 +62,20 @@ export type Selection =
   | { kind: "solid"; id: string }
   | null;
 
-/** Карта сечения SPPS (не интерполяция punctual). */
+/** Карта сечения SPPS (не интерполяция punctual), координаты проекта. */
 export interface PlanSurfaceMapOverlay {
   readonly jobId: string;
   readonly revisionId: string;
-  readonly zM: number;
+  /** Высота сечения, м; null — не указана в манифесте. */
+  readonly zM: number | null;
   readonly originX: number;
   readonly originY: number;
   readonly cellSizeM: number;
-  /** Pitch along Y; defaults to cellSizeM when omitted (square cells). */
   readonly cellSizeYM: number;
   readonly nx: number;
   readonly ny: number;
-  /** row-major; null = нет энергии (не 0 дБ). */
-  readonly lpDb: readonly (number | null)[];
+  /** row-major, дБА; null = нет энергии (не 0 дБ). */
+  readonly laDb: readonly (number | null)[];
 }
 
 interface LastRevisionInfo {
@@ -78,9 +83,11 @@ interface LastRevisionInfo {
   snapshotHash: string;
 }
 
-/** Lp (dB) shown on plan at workplaces after a completed job. */
+/** Lp shown on plan at workplaces after a completed job. */
 export interface PlanLpOverlay {
   readonly byWorkplaceId: Readonly<Record<string, number>>;
+  /** «A» — дБА; «Z» — старое задание без A-коррекции (дБ). */
+  readonly weighting: LevelWeighting;
   readonly jobId: string;
   readonly revisionId: string;
   readonly fixtureReplay: boolean;
@@ -157,23 +164,17 @@ interface EditorState {
     fixtureReplay: boolean;
     punctual: readonly {
       lpDbGlobal?: number | null;
+      laDbGlobal?: number | null;
       receiverId?: string | null;
     }[];
   }) => void;
   applySurfaceMapFromManifest: (args: {
     jobId: string;
     revisionId: string;
-    grid: {
-      originX: number;
-      originY: number;
-      cellSizeM: number;
-      cellSizeYM?: number;
-      nx: number;
-      ny: number;
-      zM?: number;
-      lpDb: readonly (number | null)[];
-    };
+    grid: PlanSurfaceGrid;
   }) => void;
+  /** Completed job → workplace levels + plan map (map only if publishable). */
+  applyJobResultToPlan: (job: JobResponse) => void;
   /** Lp на плане устарели относительно черновика / другой ревизии. */
   isPlanResultStale: () => boolean;
 }
@@ -882,28 +883,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   applySurfaceMapFromManifest: ({ jobId, revisionId, grid }) => {
-    if (surfaceGridRejectReason(grid) !== null) {
-      set({ planSurfaceMap: null });
-      return;
-    }
-    const cellY =
-      typeof grid.cellSizeYM === "number" && grid.cellSizeYM > 0
-        ? grid.cellSizeYM
-        : grid.cellSizeM;
     set({
       planSurfaceMap: {
         jobId,
         revisionId,
-        zM: grid.zM ?? 1.5,
+        zM: grid.zM,
         originX: grid.originX,
         originY: grid.originY,
         cellSizeM: grid.cellSizeM,
-        cellSizeYM: cellY,
+        cellSizeYM: grid.cellSizeYM,
         nx: grid.nx,
         ny: grid.ny,
-        lpDb: [...grid.lpDb],
+        laDb: [...grid.laDb],
       },
     });
+  },
+
+  applyJobResultToPlan: (job) => {
+    if (job.status !== "completed") return;
+    const manifest = job.resultManifest;
+    const punctual = (manifest?.punctualReceivers ?? []).filter(
+      (p) => typeof p.lpDbGlobal === "number",
+    );
+    const mode = manifest?.executionMode;
+    const usedBoxExport = manifest?.exportMeta?.mode === "export_box";
+    if (punctual.length > 0) {
+      get().applyPunctualLpToWorkplaces({
+        jobId: job.id,
+        revisionId: job.revisionId,
+        // Honesty: fixture/demo vs box export from revision AABB.
+        fixtureReplay:
+          mode === "fixture_replay" ||
+          (mode === "github_actions_spps" && !usedBoxExport),
+        punctual,
+      });
+    }
+    const map = surfaceMapFromManifest(manifest);
+    if (map?.ok) {
+      get().applySurfaceMapFromManifest({
+        jobId: job.id,
+        revisionId: job.revisionId,
+        grid: map.grid,
+      });
+    } else {
+      // Drop a map from a prior job: this one has none (or it is not publishable).
+      set({ planSurfaceMap: null });
+    }
   },
 
   applyPunctualLpToWorkplaces: ({
@@ -914,6 +939,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   }) => {
     const workplaces = get().model.workplaces;
     const byWorkplaceId: Record<string, number> = {};
+    // One unit per overlay: dBA only if every confirmed receiver has it.
+    const weighting: LevelWeighting = punctual.every(
+      (p) =>
+        typeof p.lpDbGlobal !== "number" ||
+        (typeof p.laDbGlobal === "number" && Number.isFinite(p.laDbGlobal)),
+    )
+      ? "A"
+      : "Z";
     const safeName = (name: string) =>
       name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40) || "wp";
     const used = new Set<number>();
@@ -928,7 +961,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const pick = idx >= 0 ? idx : punctual.findIndex((_, i) => !used.has(i));
       if (pick < 0) continue;
       used.add(pick);
-      const lp = punctual[pick]?.lpDbGlobal;
+      const p = punctual[pick];
+      const lp = weighting === "A" ? p?.laDbGlobal : p?.lpDbGlobal;
       if (typeof lp === "number" && Number.isFinite(lp)) {
         byWorkplaceId[wp.id] = lp;
       }
@@ -940,6 +974,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({
       planLpOverlay: {
         byWorkplaceId,
+        weighting,
         jobId,
         revisionId,
         fixtureReplay,

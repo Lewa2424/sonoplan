@@ -3,6 +3,7 @@
  * Mirrors the adapter gate (job_run) so manifests stored before it still
  * cannot show a broken recording.
  */
+import type { ResultManifestStub } from "../api/types";
 
 export const MIN_SURFACE_FILL = 0.45;
 /** Coupe overhangs all walls of a closed room — energy must reach its far edges. */
@@ -44,4 +45,76 @@ export function surfaceGridRejectReason(grid: {
     return "partialCoverage";
   }
   return null;
+}
+
+/**
+ * «notAWeighted» — задание до A-коррекции (только невзвешенный Lp);
+ * «noFrame» — неизвестна привязка сетки к координатам проекта.
+ */
+export type SurfaceMapRejectReason =
+  | SurfaceGridRejectReason
+  | "notAWeighted"
+  | "noFrame";
+
+/** Сетка карты в координатах проекта, уровни в дБА. */
+export interface PlanSurfaceGrid {
+  readonly originX: number;
+  readonly originY: number;
+  readonly cellSizeM: number;
+  readonly cellSizeYM: number;
+  readonly nx: number;
+  readonly ny: number;
+  readonly zM: number | null;
+  readonly laDb: readonly (number | null)[];
+}
+
+export type SurfaceMapResult =
+  | { readonly ok: true; readonly grid: PlanSurfaceGrid }
+  | { readonly ok: false; readonly reason: SurfaceMapRejectReason };
+
+/** null — карты в манифесте нет (не опубликована адаптером). */
+export function surfaceMapFromManifest(
+  manifest: ResultManifestStub | null | undefined,
+): SurfaceMapResult | null {
+  if (manifest?.mapAvailable !== true) return null;
+  const g = manifest.grid;
+  if (
+    !g ||
+    typeof g.originX !== "number" ||
+    typeof g.originY !== "number" ||
+    typeof g.cellSizeM !== "number" ||
+    typeof g.nx !== "number" ||
+    typeof g.ny !== "number" ||
+    !Array.isArray(g.lpDb)
+  ) {
+    return { ok: false, reason: "dimensions" };
+  }
+  const gate = surfaceGridRejectReason({ nx: g.nx, ny: g.ny, lpDb: g.lpDb });
+  if (gate !== null) return { ok: false, reason: gate };
+  if (!Array.isArray(g.laDb) || g.laDb.length < g.nx * g.ny) {
+    return { ok: false, reason: "notAWeighted" };
+  }
+  const meta = manifest.exportMeta;
+  if (
+    meta?.mode !== "export_box" ||
+    typeof meta.originX !== "number" ||
+    typeof meta.originY !== "number"
+  ) {
+    return { ok: false, reason: "noFrame" };
+  }
+  const cellY =
+    typeof g.cellSizeYM === "number" && g.cellSizeYM > 0 ? g.cellSizeYM : g.cellSizeM;
+  return {
+    ok: true,
+    grid: {
+      originX: meta.originX + g.originX,
+      originY: meta.originY + g.originY,
+      cellSizeM: g.cellSizeM,
+      cellSizeYM: cellY,
+      nx: g.nx,
+      ny: g.ny,
+      zM: typeof g.zM === "number" ? g.zM : null,
+      laDb: g.laDb,
+    },
+  };
 }

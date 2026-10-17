@@ -124,6 +124,37 @@ body {
   font-size: 0.9rem;
 }
 
+.noise-legend {
+  margin: 8px 0 0;
+  max-width: 520px;
+}
+
+.noise-legend__caption {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.noise-legend__bar {
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.noise-legend__ticks {
+  position: relative;
+  height: 1.2em;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.noise-legend__tick {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+}
+
 .page-meta {
   font-family: ui-monospace, monospace;
   word-break: break-all;

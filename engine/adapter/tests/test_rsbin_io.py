@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -243,6 +244,78 @@ class CoupeSpanGateTests(unittest.TestCase):
         )
         self.assertTrue(man["mapAvailable"])
         self.assertIsNotNone(man["grid"])
+
+
+class PerBandCutATests(unittest.TestCase):
+    """output_recs_byfreq=1: recepteurss/<f> Hz/rs_cut.csbin → grid.laDb."""
+
+    ROWS, COLS = 3, 2
+
+    def _write(self, path: Path, energy: dict[tuple[int, int], float]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        nodes = _spps_nodes(
+            b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0),
+            nb_rows=self.ROWS, nb_cols=self.COLS,
+        )
+        write_synthetic_csbin(
+            path,
+            nodes=nodes,
+            faces=_spps_coupe(base=0, nb_rows=self.ROWS, nb_cols=self.COLS, energy=energy),
+        )
+
+    def _decode(self, bands: dict[int, dict[tuple[int, int], float]], global_e=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            total: dict[tuple[int, int], float] = {}
+            for hz, en in bands.items():
+                self._write(work / "recepteurss" / f"{hz} Hz" / "rs_cut.csbin", en)
+                for k, v in en.items():
+                    total[k] = total.get(k, 0.0) + v
+            self._write(
+                work / "recepteurss" / "Global" / "rs_cut.csbin",
+                total if global_e is None else global_e,
+            )
+            return decode_spps_workdir(work).surface
+
+    def test_a_weighted_once_per_band_then_energy_sum(self) -> None:
+        cells = {(r, c): 1e-2 for r in range(self.ROWS) for c in range(self.COLS)}
+        surface = self._decode({125: cells, 1000: cells})
+        assert surface is not None
+        self.assertTrue(surface["aWeighting"]["available"], surface["aWeighting"])
+        grid = surface["grid"]
+        self.assertEqual(grid["laBandsHz"], [125, 1000])
+        # Each cell: two triangles → 2e-2 per band. LA = L1000 + 10·lg(1 + 10^−1.61).
+        l1000 = 10 * math.log10(2e-2 / (20e-6) ** 2)
+        for la, lz in zip(grid["laDb"], grid["lpDb"]):
+            self.assertAlmostEqual(la, l1000 + 10 * math.log10(1 + 10 ** -1.61), places=4)
+            self.assertAlmostEqual(lz, l1000 + 10 * math.log10(2), places=4)
+
+    def test_empty_cell_stays_null_not_zero_db(self) -> None:
+        cells = {(r, c): 1e-2 for r in range(self.ROWS) for c in range(self.COLS)}
+        cells.pop((0, 0))
+        surface = self._decode({1000: cells, 4000: cells})
+        assert surface is not None
+        self.assertTrue(surface["aWeighting"]["available"])
+        self.assertEqual(sum(v is None for v in surface["grid"]["laDb"]), 1)
+
+    def test_band_files_inconsistent_with_global_are_not_used(self) -> None:
+        cells = {(r, c): 1e-2 for r in range(self.ROWS) for c in range(self.COLS)}
+        doubled = {k: v * 4 for k, v in cells.items()}
+        surface = self._decode({1000: cells}, global_e=doubled)
+        assert surface is not None
+        self.assertFalse(surface["aWeighting"]["available"])
+        self.assertIn("deviates", surface["aWeighting"]["reason"])
+        self.assertNotIn("laDb", surface["grid"])
+
+    def test_without_band_files_no_la_grid(self) -> None:
+        cells = {(r, c): 1e-2 for r in range(self.ROWS) for c in range(self.COLS)}
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            self._write(work / "recepteurss" / "Global" / "rs_cut.csbin", cells)
+            surface = decode_spps_workdir(work).surface
+        assert surface is not None
+        self.assertFalse(surface["aWeighting"]["available"])
+        self.assertNotIn("laDb", surface["grid"])
 
 
 if __name__ == "__main__":

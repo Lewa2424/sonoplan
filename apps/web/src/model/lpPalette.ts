@@ -1,78 +1,107 @@
-/** Палитра карты сечения: автошкала по min/max ячеек с энергией (не фиксированные 80/90/100). */
+/**
+ * Фиксированная шкала карты уровня, дБА: классы по 5 дБ, ≤60 … >105.
+ * Цвета — абсолютная шкала DIN 45682:2020 (схема vs5.b, coloringnoise.com),
+ * сдвинутая на +30 дБ под производственное помещение: граница
+ * «сине-зелёный → оранжевый» приходится на 80 дБА (норма на рабочем месте).
+ * Внутри шкалы цвет плавно интерполируется между центрами классов.
+ */
 
-export type LpColorScale = {
-  readonly minDb: number;
-  readonly maxDb: number;
-};
+export interface NoiseClass {
+  /** Нижняя граница, дБА; null — открытый класс «≤ upper». */
+  readonly lowerDb: number | null;
+  /** Верхняя граница, дБА; null — открытый класс «> lower». */
+  readonly upperDb: number | null;
+  readonly rgb: readonly [number, number, number];
+}
 
-/** Continuous teal→yellow→red; null/empty → transparent. */
+export const NOISE_SCALE_UNIT = "дБА";
+const FIRST_UPPER_DB = 60;
+const STEP_DB = 5;
+
+const DIN_45682_RGB: readonly (readonly [number, number, number])[] = [
+  [130, 166, 173],
+  [160, 186, 191],
+  [184, 214, 209],
+  [206, 228, 204],
+  [226, 242, 191],
+  [243, 198, 131],
+  [232, 126, 77],
+  [205, 70, 62],
+  [161, 26, 77],
+  [117, 8, 92],
+  [67, 10, 74],
+];
+
+export const NOISE_CLASSES: readonly NoiseClass[] = DIN_45682_RGB.map((rgb, i) => ({
+  lowerDb: i === 0 ? null : FIRST_UPPER_DB + (i - 1) * STEP_DB,
+  upperDb: i === DIN_45682_RGB.length - 1 ? null : FIRST_UPPER_DB + i * STEP_DB,
+  rgb,
+}));
+
+/** Центры классов: открытые крайние классы — на полшага за границей. */
+const ANCHORS_DB = NOISE_CLASSES.map(
+  (_, i) => FIRST_UPPER_DB - STEP_DB / 2 + i * STEP_DB,
+);
+
+/** Прозрачность ячейки карты: план под ней остаётся читаемым. */
+const CELL_ALPHA = 215;
+
+export function noiseRgb(levelDb: number): [number, number, number] {
+  const first = ANCHORS_DB[0]!;
+  const last = ANCHORS_DB[ANCHORS_DB.length - 1]!;
+  if (levelDb <= first) return [...DIN_45682_RGB[0]!];
+  if (levelDb >= last) return [...DIN_45682_RGB[DIN_45682_RGB.length - 1]!];
+  const pos = (levelDb - first) / STEP_DB;
+  const i = Math.floor(pos);
+  const u = pos - i;
+  const a = DIN_45682_RGB[i]!;
+  const b = DIN_45682_RGB[i + 1]!;
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * u),
+    Math.round(a[1] + (b[1] - a[1]) * u),
+    Math.round(a[2] + (b[2] - a[2]) * u),
+  ];
+}
+
+/** null / нет энергии → прозрачно (не «тишина»). */
 export function lpToRgba(
   lpDb: number | null | undefined,
-  scale: LpColorScale,
 ): [number, number, number, number] {
   if (lpDb === null || lpDb === undefined || !Number.isFinite(lpDb)) {
     return [0, 0, 0, 0];
   }
-  const span = scale.maxDb - scale.minDb;
-  const t =
-    span < 0.5
-      ? 0.5
-      : Math.min(1, Math.max(0, (lpDb - scale.minDb) / span));
-  const [r, g, b] = sampleRamp(t);
-  const a = 110 + Math.round(70 * t);
-  return [r, g, b, a];
+  const [r, g, b] = noiseRgb(lpDb);
+  return [r, g, b, CELL_ALPHA];
 }
 
-/** Stops: quiet (teal) → mid (yellow) → loud (red). Not absolute dB thresholds. */
-const RAMP: readonly (readonly [number, number, number, number])[] = [
-  [0, 20, 120, 140],
-  [0.35, 34, 180, 140],
-  [0.55, 234, 179, 8],
-  [0.75, 234, 88, 12],
-  [1, 220, 38, 38],
-];
-
-function sampleRamp(t: number): [number, number, number] {
-  let i = 0;
-  while (i < RAMP.length - 2 && t > RAMP[i + 1]![0]) i += 1;
-  const a = RAMP[i]!;
-  const b = RAMP[i + 1]!;
-  const u = (t - a[0]) / Math.max(b[0] - a[0], 1e-9);
-  return [
-    Math.round(a[1] + (b[1] - a[1]) * u),
-    Math.round(a[2] + (b[2] - a[2]) * u),
-    Math.round(a[3] + (b[3] - a[3]) * u),
-  ];
+/** CSS linear-gradient той же шкалы (легенда ≡ карта). */
+export function noiseScaleCssGradient(): string {
+  const lo = FIRST_UPPER_DB - STEP_DB;
+  const hi = FIRST_UPPER_DB + (NOISE_CLASSES.length - 1) * STEP_DB;
+  const stops = ANCHORS_DB.map((db, i) => {
+    const [r, g, b] = DIN_45682_RGB[i]!;
+    const pct = ((db - lo) / (hi - lo)) * 100;
+    return `rgb(${r}, ${g}, ${b}) ${pct.toFixed(2)}%`;
+  });
+  return `linear-gradient(to right, ${stops.join(", ")})`;
 }
 
-export function computeLpScale(
-  lpDb: readonly (number | null)[],
-): LpColorScale | null {
-  let minDb = Infinity;
-  let maxDb = -Infinity;
-  for (const v of lpDb) {
-    if (v === null || v === undefined || !Number.isFinite(v)) continue;
-    if (v < minDb) minDb = v;
-    if (v > maxDb) maxDb = v;
-  }
-  if (!Number.isFinite(minDb) || !Number.isFinite(maxDb)) return null;
-  if (maxDb - minDb < 0.5) {
-    return { minDb: minDb - 0.25, maxDb: maxDb + 0.25 };
-  }
-  return { minDb, maxDb };
+/** Подписи границ легенды (60, 65, …, 105). */
+export function noiseScaleTicksDb(): number[] {
+  return NOISE_CLASSES.slice(1).map((c) => c.lowerDb!);
 }
 
-export function formatLpScaleLegend(scale: LpColorScale): string {
-  const a = scale.minDb.toFixed(1);
-  const b = scale.maxDb.toFixed(1);
-  return `${a}…${b} дБ (авто по карте): тихо → громко`;
+export function noiseScaleSpanDb(): { readonly loDb: number; readonly hiDb: number } {
+  return {
+    loDb: FIRST_UPPER_DB - STEP_DB,
+    hiDb: FIRST_UPPER_DB + (NOISE_CLASSES.length - 1) * STEP_DB,
+  };
 }
 
 export function surfaceMapToDataUrl(args: {
   nx: number;
   ny: number;
   lpDb: readonly (number | null)[];
-  scale?: LpColorScale | null;
 }): string | null {
   return surfaceMapToCanvas(args)?.toDataURL("image/png") ?? null;
 }
@@ -82,13 +111,11 @@ export function surfaceMapToCanvas(args: {
   nx: number;
   ny: number;
   lpDb: readonly (number | null)[];
-  scale?: LpColorScale | null;
 }): HTMLCanvasElement | null {
   const { nx, ny, lpDb } = args;
   if (nx < 1 || ny < 1 || lpDb.length < nx * ny) return null;
   if (typeof document === "undefined") return null;
-  const scale = args.scale ?? computeLpScale(lpDb);
-  if (!scale) return null;
+  if (!lpDb.some((v) => v !== null && Number.isFinite(v))) return null;
   // Native cell bitmap, then upsample with smoothing for less "LEGO" on phone.
   const src = document.createElement("canvas");
   src.width = nx;
@@ -101,7 +128,7 @@ export function surfaceMapToCanvas(args: {
       // row 0 = min Y (project); canvas y grows down → flip
       const srcRow = ny - 1 - j;
       const lp = lpDb[srcRow * nx + i] ?? null;
-      const [r, g, b, a] = lpToRgba(lp, scale);
+      const [r, g, b, a] = lpToRgba(lp);
       const o = (j * nx + i) * 4;
       img.data[o] = r;
       img.data[o + 1] = g;
@@ -117,6 +144,7 @@ export function surfaceMapToCanvas(args: {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
   ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
   return canvas;
 }

@@ -78,6 +78,19 @@ class RealRecpFixtureTest(unittest.TestCase):
             self.assertGreater(decoded.energy_sum_global, 0.0)
             self.assertTrue(any(b.nonzero_timesteps > 0 for b in decoded.bands))
 
+    def test_la_global_weights_each_band_once_by_energy(self) -> None:
+        decoded = read_punctual_sound_level(RECP)
+        if decoded.energy_sum_global == 0.0:
+            self.assertIsNone(decoded.la_db_global)
+            return
+        # 100 Hz: A = −19.1 dB; 1000 Hz: A = 0 dB (IEC 61672-1).
+        e100, e1000 = (b.energy_sum for b in decoded.bands)
+        expected = 10 * math.log10((e100 * 10 ** -1.91 + e1000) * P0_INV_PREF2)
+        assert decoded.la_db_global is not None
+        self.assertAlmostEqual(decoded.la_db_global, expected, places=9)
+        self.assertIsNone(decoded.la_db_global_reason)
+        self.assertEqual(decoded.summary_dict()["laDbGlobal"], decoded.la_db_global)
+
     def test_corrupt_file_raises(self) -> None:
         with self.assertRaises(RecpDecodeError):
             read_punctual_sound_level(FIXTURE_EXPECTED / "does-not-exist.recp")

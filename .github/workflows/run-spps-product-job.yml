@@ -200,6 +200,10 @@ jobs:
                       "widthM": meta.width_m,
                       "depthM": meta.depth_m,
                       "heightM": meta.height_m,
+                      # SPPS coordinates = project coordinates − origin.
+                      "originX": meta.origin_x,
+                      "originY": meta.origin_y,
+                      "coupeZM": payload.get("coupeZM"),
                       "exactRectangle": meta.exact_rectangle,
                       "sourceCount": meta.source_count,
                       "workplaceCount": meta.workplace_count,
@@ -251,8 +255,10 @@ jobs:
           mkdir -p "$OUT/workdir_probe"
           cp -a "$WORK/config.xml" "$OUT/workdir_probe/config.xml" 2>/dev/null || true
           if [ -d "$WORK/recepteurss" ]; then
-            find "$WORK/recepteurss" -type f | tee "$OUT/workdir_probe/recepteurss_listing.txt" || true
-            cp -a "$WORK/recepteurss" "$OUT/workdir_probe/recepteurss" 2>/dev/null || true
+            find "$WORK/recepteurss" -type f -exec ls -l {} + | tee "$OUT/workdir_probe/recepteurss_listing.txt" || true
+            # Per-band "<f> Hz/" copies would multiply the artifact; Global is enough.
+            mkdir -p "$OUT/workdir_probe/recepteurss"
+            cp -a "$WORK/recepteurss/Global" "$OUT/workdir_probe/recepteurss/Global" 2>/dev/null || true
           fi
           if [ -d "$WORK/recepteurssGlobal" ]; then
             echo "legacy_path_recepteurssGlobal_present" | tee -a "$OUT/workdir_probe/recepteurss_listing.txt"

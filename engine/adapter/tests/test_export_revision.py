@@ -128,6 +128,60 @@ class ExportRevisionTests(unittest.TestCase):
         for k in ("az", "bz", "cz", "resolution"):
             self.assertEqual(probe.get(k), main.get(k))
 
+    def test_all_model_octaves_computed_and_cut_saved_per_band(self) -> None:
+        from sonoplan_adapter.export_revision import build_config_xml
+
+        root = build_config_xml(compact_export_payload(_rect_snapshot())).getroot()
+        sim = root.find("simulation")
+        assert sim is not None
+        on = sorted(
+            int(b.get("freq") or 0)
+            for b in sim.findall("freq_enum/bfreq")
+            if b.get("docalc") == "1"
+        )
+        self.assertEqual(on, [63, 125, 250, 500, 1000, 2000, 4000, 8000])
+        self.assertEqual(sim.get("output_recs_byfreq"), "1")
+
+    def test_coupe_resolution_halved_and_capped(self) -> None:
+        from sonoplan_adapter.export_revision import MAX_COUPE_CELLS, coupe_resolution_m
+
+        self.assertAlmostEqual(coupe_resolution_m(20, 12), 0.15)
+        self.assertAlmostEqual(coupe_resolution_m(6, 4), 0.125)
+        self.assertAlmostEqual(coupe_resolution_m(40, 30), 0.25)
+        big = coupe_resolution_m(200, 100)
+        self.assertLessEqual((200 / big) * (100 / big), MAX_COUPE_CELLS + 1e-6)
+
+    def test_coupe_z_parity_with_web_plan_cut(self) -> None:
+        """Same cases as packages/domain/src/planCut.test.ts (estimate plane)."""
+        from sonoplan_adapter.export_revision import build_config_xml
+
+        def snap(h, wps, srcs):
+            s = _rect_snapshot(w=10, d=8, h=h)
+            s["sources"] = [
+                {"id": f"s{i}", "position": {"x": 2 + i, "y": 2, "z": z},
+                 "powerSpectrumLw": [{"bandHz": 1000, "level": {"value": 90}}]}
+                for i, z in enumerate(srcs)
+            ]
+            s["workplaces"] = [
+                {"id": f"w{i}", "position": {"x": 5, "y": 5, "z": z},
+                 "receiverHeightM": {"value": rh}}
+                for i, (z, rh) in enumerate(wps)
+            ]
+            return s
+
+        cases = [
+            (6, [(0, 1.5), (0, 1.5)], [1.0], 1.5),
+            (6, [(0, 1.5)], [1.5], 1.15),
+            (6, [(0, 1.5)], [1.5, 1.2], 1.85),
+            (6, [(0, 1.6), (1.2, 1.5)], [1.0, 1.75], 1.4),
+            (6, [(0, 1.5)], [1.5, 1.15, 1.85, 0.8, 2.2], 0.25),
+            (1.0, [(0, 1.5)], [0.5], 0.85),
+        ]
+        for h, wps, srcs, expected in cases:
+            p = compact_export_payload(snap(h, wps, srcs))
+            build_config_xml(p)
+            self.assertAlmostEqual(p["coupeZM"], expected, places=9, msg=(h, wps, srcs))
+
     def test_write_workdir_scales_mesh(self) -> None:
         root = Path(__file__).resolve().parents[2]
         fixture = root / "fixtures" / "minimal_room" / "inputs"

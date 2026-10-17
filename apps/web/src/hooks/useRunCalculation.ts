@@ -1,31 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, NetworkError } from "../api/client";
 import { createJob, getJob, newIdempotencyKey } from "../api/jobsApi";
-import type { JobResponse, ResultManifestStub } from "../api/types";
+import type { JobResponse } from "../api/types";
 import { ru } from "../i18n/ru";
 import { useEditorStore } from "../store/editorStore";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 const POLL_MS = 1500;
 
-function confirmedPunctual(manifest: ResultManifestStub | null | undefined) {
-  const list = manifest?.punctualReceivers;
-  if (!list) return [];
-  return list.filter((p) => p.lpDbGlobal !== null && p.lpDbGlobal !== undefined);
-}
-
 export function useRunCalculation() {
   const connectionMode = useEditorStore((s) => s.connectionMode);
   const commitRevision = useEditorStore((s) => s.commitRevision);
   const lastCalcJobId = useEditorStore((s) => s.lastCalcJobId);
   const setLastCalcJobId = useEditorStore((s) => s.setLastCalcJobId);
-  const applyPunctualLpToWorkplaces = useEditorStore(
-    (s) => s.applyPunctualLpToWorkplaces,
-  );
-  const applySurfaceMapFromManifest = useEditorStore(
-    (s) => s.applySurfaceMapFromManifest,
-  );
-  const setPlanSurfaceMap = useEditorStore((s) => s.setPlanSurfaceMap);
+  const applyJobResultToPlan = useEditorStore((s) => s.applyJobResultToPlan);
 
   const [job, setJob] = useState<JobResponse | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,74 +32,11 @@ export function useRunCalculation() {
   const applyFromJob = useCallback(
     (next: JobResponse) => {
       if (next.status !== "completed") return;
-      const manifest = next.resultManifest;
       if (appliedJobIdRef.current === next.id) return;
       appliedJobIdRef.current = next.id;
-
-      const punctual = confirmedPunctual(manifest);
-      const mode = manifest?.executionMode;
-      const exportMeta = (
-        manifest as { exportMeta?: { mode?: string } } | null
-      )?.exportMeta;
-      const usedBoxExport = exportMeta?.mode === "export_box";
-      if (punctual.length > 0) {
-        applyPunctualLpToWorkplaces({
-          jobId: next.id,
-          revisionId: next.revisionId,
-          fixtureReplay:
-            mode === "fixture_replay" ||
-            (mode === "github_actions_spps" && !usedBoxExport),
-          punctual,
-        });
-      }
-
-      const grid = (
-        manifest as {
-          grid?: {
-            originX?: number;
-            originY?: number;
-            cellSizeM?: number;
-            cellSizeYM?: number;
-            nx?: number;
-            ny?: number;
-            zM?: number;
-            lpDb?: (number | null)[];
-          } | null;
-        } | null
-      )?.grid;
-      if (
-        manifest?.mapAvailable === true &&
-        grid &&
-        typeof grid.originX === "number" &&
-        typeof grid.originY === "number" &&
-        typeof grid.cellSizeM === "number" &&
-        typeof grid.nx === "number" &&
-        typeof grid.ny === "number" &&
-        Array.isArray(grid.lpDb)
-      ) {
-        applySurfaceMapFromManifest({
-          jobId: next.id,
-          revisionId: next.revisionId,
-          grid: {
-            originX: grid.originX,
-            originY: grid.originY,
-            cellSizeM: grid.cellSizeM,
-            cellSizeYM: grid.cellSizeYM,
-            nx: grid.nx,
-            ny: grid.ny,
-            zM: grid.zM,
-            lpDb: grid.lpDb,
-          },
-        });
-      } else {
-        setPlanSurfaceMap(null);
-      }
+      applyJobResultToPlan(next);
     },
-    [
-      applyPunctualLpToWorkplaces,
-      applySurfaceMapFromManifest,
-      setPlanSurfaceMap,
-    ],
+    [applyJobResultToPlan],
   );
 
   const refreshJob = useCallback(

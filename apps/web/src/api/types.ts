@@ -62,6 +62,9 @@ export interface PunctualReceiverSummary {
   readonly energySumGlobal?: number;
   readonly lpDbGlobal?: number | null;
   readonly lpDbGlobalReason?: string | null;
+  /** A-взвешенный суммарный уровень (дБА); нет у заданий до A-коррекции. */
+  readonly laDbGlobal?: number | null;
+  readonly laDbGlobalReason?: string | null;
   readonly bandLabels?: readonly string[];
   readonly bands?: readonly {
     readonly label?: string;
@@ -70,8 +73,33 @@ export interface PunctualReceiverSummary {
   }[];
 }
 
+/** Сетка сечения SPPS; origin — в координатах SPPS (проект − exportMeta.origin). */
+export interface ResultGridStub {
+  readonly originX?: number;
+  readonly originY?: number;
+  readonly cellSizeM?: number;
+  readonly cellSizeYM?: number;
+  readonly nx?: number;
+  readonly ny?: number;
+  readonly zM?: number;
+  /** Невзвешенный Lp, дБ. */
+  readonly lpDb?: readonly (number | null)[];
+  /** A-взвешенный Lp, дБА. */
+  readonly laDb?: readonly (number | null)[];
+  readonly laBandsHz?: readonly number[];
+}
+
+export interface ExportMetaStub {
+  readonly mode?: string;
+  readonly originX?: number;
+  readonly originY?: number;
+  readonly coupeZM?: number | null;
+}
+
 export interface ResultManifestStub {
   readonly schemaVersion?: string;
+  readonly grid?: ResultGridStub | null;
+  readonly exportMeta?: ExportMetaStub;
   readonly jobId?: string;
   readonly revisionId?: string;
   readonly snapshotHash?: string;

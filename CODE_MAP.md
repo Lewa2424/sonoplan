@@ -30,11 +30,13 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 |------|------|
 | `apps/web` | React+Vite+TS; редактор цеха (Konva) + экран «Расчёты» |
 | `apps/web/src/api` | fetch-клиент `/api/v1`, ETag/If-Match, jobs |
-| `apps/web/src/pages/CalculationsPage.tsx` | job + polling; таблица punctual Lp (дБ); карта поверхности отложена |
+| `apps/web/src/pages/CalculationsPage.tsx` | job + polling; таблица punctual Lp (дБ) и LA (дБА); карта SPPS в дБА |
 | `apps/web/src/store/editorStore.ts` | Zustand: модель, selection, sync, validate, revision |
-| `apps/web/src/model/surfaceMapValidity.ts` | Правдоподобие сетки SPPS (заполнение ≥45 %, охват ≥90 %); иначе карта скрыта |
+| `apps/web/src/model/surfaceMapValidity.ts` | Правдоподобие сетки SPPS (заполнение ≥45 %, охват ≥90 %), наличие `laDb` и рамки `exportMeta`; `surfaceMapFromManifest` → сетка в координатах проекта |
+| `apps/web/src/model/lpPalette.ts` / `components/NoiseScaleLegend.tsx` | Фиксированная шкала дБА (≤60…>105, цвета DIN 45682 +30 дБ) для карты SPPS и оценки |
 | `packages/domain` | Типы; координаты; геометрия; `computeSnapshotHash`; `validateModel` |
-| `packages/domain/src/diffuseFieldEstimate.ts` | Предварительная оценка Lp по формуле помещения (OPT-010), не SPPS; слой «Оценка» на плане |
+| `packages/domain/src/diffuseFieldEstimate.ts` | Предварительная оценка Lp/LA по формуле помещения (OPT-010), не SPPS; слой «Оценка» на плане |
+| `packages/domain/src/aWeighting.ts` / `planCut.ts` | A-коррекция октав (IEC 61672-1); высота среза плана — паритет с `export_revision._coupe_z_away_from_sources` |
 | `packages/contracts` | `schemas/project.schema.json`, `openapi/openapi.yaml`, `SCHEMA_VERSION` |
 | `services/api` | FastAPI: projects/draft/revisions/validate/**jobs** |
 | `services/api/scripts/restart-api.ps1` | Windows: kill port-8000 orphans, start uvicorn **without** `--reload` |
@@ -44,6 +46,7 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box + materials α + coupe plane + sources/РМ |
 | `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube cbin/mbin floats to room box (preserve layout) |
 | `engine/adapter/sonoplan_adapter/rsbin_io.py` | ENG-006: decode surface/coupe `.csbin` → Lp grid (not from punctual) |
+| `engine/adapter/sonoplan_adapter/weighting.py` | A-weighting по энергии полос; `laDb` карты из `recepteurss/<f> Hz/` со сверкой с Global (≤0.5 дБ) |
 | `apps/web/src/model/materialCatalog.ts` / `equipmentCatalog.ts` | Каталоги покрытий и оборудования (оценочные α / Lw) |
 | `docs/github-actions-worker.md` | Setup PAT / env for Actions backend |
 | `services/api/alembic` | `projects` / `drafts` / `revisions` / **`jobs`** |

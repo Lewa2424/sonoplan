@@ -80,7 +80,13 @@ class SurfaceCsbin:
             "nodeCount": len(self.nodes),
             "faceCount": len(self.faces),
             "grid": self.grid,
-            "receivers": [r.to_dict() for r in (self.receivers or [])],
+            # First receiver's grid is ``grid`` above — not repeated (manifest size).
+            "receivers": [
+                {**r.to_dict(), "grid": None, "gridIsTopLevel": True}
+                if i == 0 and r.grid is self.grid
+                else r.to_dict()
+                for i, r in enumerate(self.receivers or [])
+            ],
             "notes": [
                 "RSBIN energy is p^2-homogeneous; Lp after energy sum.",
                 "Zero face energy → lpDb=null (not 0 dB).",
@@ -193,14 +199,22 @@ def read_surface_csbin(path: Path | str) -> SurfaceCsbin:
                 raise CsbinDecodeError("truncated face")
             a, b, c, nb_rec = struct.unpack_from("<iiii", data, off)
             off += face_len
-            energy_sum = 0.0
-            for _t in range(nb_rec):
-                if off + face_val_len > len(data):
-                    raise CsbinDecodeError("truncated faceValue")
-                # timeStep uint16 at 0; energy float at end-4
-                energy = struct.unpack_from("<f", data, off + face_val_len - 4)[0]
-                energy_sum += float(energy)
-                off += face_val_len
+            end = off + nb_rec * face_val_len
+            if nb_rec < 0 or end > len(data):
+                raise CsbinDecodeError("truncated faceValue")
+            # timeStep uint16 at 0; energy float at end-4
+            if face_val_len == _FACE_VALUE_SIZE:
+                energy_sum = float(
+                    sum(e for (e,) in struct.iter_unpack("<4xf", data[off:end]))
+                )
+            else:
+                energy_sum = float(
+                    sum(
+                        struct.unpack_from("<f", data, p + face_val_len - 4)[0]
+                        for p in range(off, end, face_val_len)
+                    )
+                )
+            off = end
             faces_out.append(
                 SurfaceFaceEnergy(
                     a=a,

@@ -21,6 +21,12 @@ from pathlib import Path
 from typing import Any
 
 from .gabe import GabeFormatError, GabeObjectType, load_gabe
+from .weighting import (
+    UnknownBandError,
+    a_weighted_energy,
+    a_weighted_level_grid,
+    band_hz_from_label,
+)
 
 # I-Simpa: const float p_0 = 1/pow((float)(20*pow(10.f,(int)-6)),(int)2);
 PREF_PA = 20e-6
@@ -39,7 +45,7 @@ CONVERSION_NOTE = "Lp_dB = 10*log10(energy_sum * (1/(20e-6 Pa)^2)) after energy 
 FILE_CONTENT_NOTES = (
     "Disk values are p^2-homogeneous energy, not SPL.",
     "Zero energy sum -> lp_db is null (not 0 dB / silence).",
-    "A-weighting is not applied here; apply once to unweighted bands only.",
+    "lpDb* are unweighted; laDbGlobal applies IEC 61672-1 A-weighting once per band, then energy sum.",
 )
 
 
@@ -85,6 +91,8 @@ class PunctualSoundLevel:
     energy_sum_global: float
     lp_db_global: float | None
     lp_db_global_reason: str | None
+    la_db_global: float | None = None
+    la_db_global_reason: str | None = "not_computed"
     quantity_in_file: str = QUANTITY_IN_FILE
     unit_in_file: str = UNIT_IN_FILE
     display_quantity: str = QUANTITY_DISPLAY
@@ -111,6 +119,8 @@ class PunctualSoundLevel:
             "energySumGlobal": self.energy_sum_global,
             "lpDbGlobal": self.lp_db_global,
             "lpDbGlobalReason": self.lp_db_global_reason,
+            "laDbGlobal": self.la_db_global,
+            "laDbGlobalReason": self.la_db_global_reason,
             "notes": list(self.notes),
             # Full energy grid kept for golden/debug; omit from default manifest if huge.
             "energyByBand": [list(row) for row in self.energy_by_band],
@@ -197,6 +207,13 @@ def read_punctual_sound_level(path: Path | str) -> PunctualSoundLevel:
 
     energy_global = float(sum(b.energy_sum for b in bands))
     lp_global, lp_global_reason = energy_to_lp_db(energy_global)
+    try:
+        energy_a = a_weighted_energy(
+            {band_hz_from_label(b.band_label): b.energy_sum for b in bands}
+        )
+        la_global, la_global_reason = energy_to_lp_db(energy_a)
+    except UnknownBandError as exc:
+        la_global, la_global_reason = None, f"a_weighting_unavailable: {exc}"
 
     return PunctualSoundLevel(
         path=str(p),
@@ -208,6 +225,8 @@ def read_punctual_sound_level(path: Path | str) -> PunctualSoundLevel:
         energy_sum_global=energy_global,
         lp_db_global=lp_global,
         lp_db_global_reason=lp_global_reason,
+        la_db_global=la_global,
+        la_db_global_reason=la_global_reason,
     )
 
 
@@ -239,6 +258,78 @@ class DecodedWorkdir:
             "statsProbe": self.stats_probe,
             "surface": self.surface,
         }
+
+
+# Per-band cut files must reproduce recepteurss/Global (unweighted energy sum);
+# a larger gap means the band files are not what we think they are.
+_A_GRID_MAX_DEV_DB = 0.5
+
+
+def _attach_a_weighted_grid(
+    work: Path, surface: dict[str, Any], errors: list[str]
+) -> dict[str, Any]:
+    """Add ``grid["laDb"]`` from ``recepteurss/<f> Hz/<cut file>`` (output_recs_byfreq=1)."""
+    grid = surface.get("grid")
+    if not isinstance(grid, dict) or not grid.get("lpDb"):
+        return {"available": False, "reason": "no global surface grid"}
+    global_lp: list[float | None] = list(grid["lpDb"])
+    filename = Path(str(surface.get("relativePath") or "rs_cut.csbin")).name
+    root = work / "recepteurss"
+    band_lp: dict[int, list[float | None]] = {}
+    for band_dir in sorted(root.glob("* Hz")) if root.is_dir() else []:
+        try:
+            hz = band_hz_from_label(band_dir.name)
+        except UnknownBandError:
+            continue
+        path = band_dir / filename
+        if not path.is_file():
+            continue
+        try:
+            decoded = read_surface_csbin(path)
+        except (RecpDecodeError, OSError) as exc:
+            errors.append(f"{path}: {exc}")
+            return {"available": False, "reason": f"band {hz} Hz decode failed"}
+        block = next(
+            (r for r in decoded.receivers or [] if r.name == surface.get("receiverName")),
+            None,
+        )
+        band_grid = block.grid if block else decoded.grid
+        if band_grid is None:
+            band_lp[hz] = [None] * len(global_lp)
+            continue
+        if (
+            band_grid.get("nx") != grid.get("nx")
+            or band_grid.get("ny") != grid.get("ny")
+            or abs(float(band_grid["originX"]) - float(grid["originX"])) > 1e-6
+            or abs(float(band_grid["originY"]) - float(grid["originY"])) > 1e-6
+        ):
+            return {"available": False, "reason": f"band {hz} Hz grid layout differs from Global"}
+        band_lp[hz] = list(band_grid["lpDb"])
+    if not band_lp:
+        return {
+            "available": False,
+            "reason": "no per-band cut files (output_recs_byfreq off?)",
+        }
+
+    max_dev = 0.0
+    for k, g_lp in enumerate(global_lp):
+        e = sum(10.0 ** (b[k] / 10.0) for b in band_lp.values() if b[k] is not None)
+        if (e > 0) != (g_lp is not None):
+            return {"available": False, "reason": f"cell {k}: band files disagree with Global on energy presence"}
+        if g_lp is not None:
+            max_dev = max(max_dev, abs(10.0 * math.log10(e) - g_lp))
+    if max_dev > _A_GRID_MAX_DEV_DB:
+        return {
+            "available": False,
+            "reason": f"band sum deviates from Global by {max_dev:.2f} dB",
+            "maxDevVsGlobalDb": max_dev,
+        }
+    try:
+        grid["laDb"] = a_weighted_level_grid(band_lp)
+    except UnknownBandError as exc:
+        return {"available": False, "reason": str(exc)}
+    grid["laBandsHz"] = sorted(band_lp)
+    return {"available": True, "bandsHz": sorted(band_lp), "maxDevVsGlobalDb": max_dev}
 
 
 def decode_spps_workdir(work_dir: Path) -> DecodedWorkdir:
@@ -322,6 +413,9 @@ def decode_spps_workdir(work_dir: Path) -> DecodedWorkdir:
             break
         except (RecpDecodeError, OSError, BinaryDecodeNotReady) as exc:
             errors.append(f"{csbin}: {exc}")
+
+    if surface is not None:
+        surface["aWeighting"] = _attach_a_weighted_grid(work, surface, errors)
 
     punctual_errors = [e for e in errors if "Sound level.recp" in e]
     ok = bool(punctual) and not punctual_errors

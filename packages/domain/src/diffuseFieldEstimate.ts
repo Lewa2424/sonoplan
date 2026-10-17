@@ -4,8 +4,10 @@
  *
  * Это не SPPS и не замена проверенного расчёта (ТЗ OPT-010): не учитывает
  * экраны/препятствия, неравномерность поглощения, форму помещения, воздух.
- * Источники складываются по энергии; полосы — по энергии, без A-коррекции.
+ * Источники и полосы складываются по энергии; при weighting «A» коррекция
+ * применяется один раз к каждой невзвешенной полосе до суммирования.
  */
+import { aWeightingDb, type LevelWeighting } from "./aWeighting.js";
 import { pointInPolygon, stripClosingDuplicate } from "./geometry.js";
 import type { FloorVertex, ModelSnapshot } from "./types.js";
 
@@ -129,17 +131,28 @@ export function buildDiffuseFieldInput(
   };
 }
 
-/** Суммарный Lp (дБ, без A-коррекции) в точке; null, если энергии нет. */
+function bandWeightDb(bandHz: number, weighting: LevelWeighting): number {
+  if (weighting === "Z") return 0;
+  const a = aWeightingDb(bandHz);
+  if (a === null) {
+    throw new RangeError(`A-weighting unknown for ${bandHz} Hz (not a nominal band)`);
+  }
+  return a;
+}
+
+/** Суммарный Lp в точке (дБА при «A», дБ при «Z»); null, если энергии нет. */
 export function estimateLpAt(
   input: DiffuseFieldInput,
   x: number,
   y: number,
   z: number,
+  weighting: LevelWeighting,
 ): number | null {
   let total = 0;
   for (const hz of input.bandsHz) {
     const r = input.roomConstantByBandHz.get(hz)!;
     const reverberant = Number.isFinite(r) ? 4 / r : 0;
+    const weight = bandWeightDb(hz, weighting);
     for (const s of input.sources) {
       const lw = s.lwByBandHz.get(hz);
       if (lw === undefined) continue;
@@ -148,7 +161,7 @@ export function estimateLpAt(
         DIFFUSE_MIN_DISTANCE_M,
       );
       const direct = DIRECTIVITY_Q / (4 * Math.PI * dist * dist);
-      total += 10 ** (lw / 10) * (direct + reverberant);
+      total += 10 ** ((lw + weight) / 10) * (direct + reverberant);
     }
   }
   return total > 0 ? 10 * Math.log10(total) : null;
@@ -161,14 +174,16 @@ export interface DiffuseFieldGrid {
   readonly nx: number;
   readonly ny: number;
   readonly zM: number;
+  readonly weighting: LevelWeighting;
   /** Row-major, строка 0 = min Y; вне контура → null. */
   readonly lpDb: readonly (number | null)[];
 }
 
-/** Горизонтальная сетка оценки по габариту контура; шаг по умолчанию ~1/40 меньшей стороны. */
+/** Горизонтальная сетка оценки по габариту контура; шаг по умолчанию ~1/80 меньшей стороны. */
 export function estimateLpGrid(
   input: DiffuseFieldInput,
   zM: number,
+  weighting: LevelWeighting,
   cellSizeM?: number,
 ): DiffuseFieldGrid {
   let minX = Infinity;
@@ -184,7 +199,7 @@ export function estimateLpGrid(
   const w = maxX - minX;
   const d = maxY - minY;
   const cell =
-    cellSizeM ?? Math.min(1, Math.max(0.2, Math.min(w, d) / 40));
+    cellSizeM ?? Math.min(0.5, Math.max(0.1, Math.min(w, d) / 80));
   const nx = Math.max(1, Math.ceil(w / cell));
   const ny = Math.max(1, Math.ceil(d / cell));
   const lpDb: (number | null)[] = new Array(nx * ny);
@@ -193,9 +208,9 @@ export function estimateLpGrid(
     for (let i = 0; i < nx; i++) {
       const cx = minX + (i + 0.5) * cell;
       lpDb[j * nx + i] = pointInPolygon({ x: cx, y: cy }, input.contour)
-        ? estimateLpAt(input, cx, cy, zM)
+        ? estimateLpAt(input, cx, cy, zM, weighting)
         : null;
     }
   }
-  return { originX: minX, originY: minY, cellSizeM: cell, nx, ny, zM, lpDb };
+  return { originX: minX, originY: minY, cellSizeM: cell, nx, ny, zM, weighting, lpDb };
 }

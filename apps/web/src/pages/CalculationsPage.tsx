@@ -3,21 +3,18 @@ import { ApiError, NetworkError } from "../api/client";
 import { cancelJob, createJob, getJob, newIdempotencyKey } from "../api/jobsApi";
 import type { JobResponse, PunctualReceiverSummary } from "../api/types";
 import { ru } from "../i18n/ru";
-import {
-  computeLpScale,
-  formatLpScaleLegend,
-} from "../model/lpPalette";
-import { surfaceGridRejectReason } from "../model/surfaceMapValidity";
+import { NoiseScaleLegend } from "../components/NoiseScaleLegend";
+import { surfaceMapFromManifest } from "../model/surfaceMapValidity";
 import { useEditorStore } from "../store/editorStore";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 const POLL_MS = 1500;
 
-function formatLp(lp: number | null | undefined): string {
+function formatLevel(lp: number | null | undefined, unit: "дБА" | "дБ"): string {
   if (lp === null || lp === undefined || Number.isNaN(lp)) {
     return "— (null)";
   }
-  return `${lp.toFixed(1)} дБ`;
+  return `${lp.toFixed(1)} ${unit}`;
 }
 
 function formatEnergy(e: number | null | undefined): string {
@@ -38,12 +35,7 @@ export function CalculationsPage() {
   const lastRevision = useEditorStore((s) => s.lastRevision);
   const connectionMode = useEditorStore((s) => s.connectionMode);
   const commitRevision = useEditorStore((s) => s.commitRevision);
-  const applyPunctualLpToWorkplaces = useEditorStore(
-    (s) => s.applyPunctualLpToWorkplaces,
-  );
-  const applySurfaceMapFromManifest = useEditorStore(
-    (s) => s.applySurfaceMapFromManifest,
-  );
+  const applyJobResultToPlan = useEditorStore((s) => s.applyJobResultToPlan);
   const planLpOverlay = useEditorStore((s) => s.planLpOverlay);
   const isPlanResultStale = useEditorStore((s) => s.isPlanResultStale);
   const lastCalcJobId = useEditorStore((s) => s.lastCalcJobId);
@@ -65,80 +57,17 @@ export function CalculationsPage() {
 
   useEffect(() => () => stopPoll(), [stopPoll]);
 
-  const setPlanSurfaceMap = useEditorStore((s) => s.setPlanSurfaceMap);
-
   const applyLevelsFromJob = useCallback(
     (next: JobResponse) => {
       if (next.status !== "completed") return;
       const manifest = next.resultManifest;
       const punctual = confirmedReceivers(manifest?.punctualReceivers);
-      const hasMap = manifest?.mapAvailable === true;
-      if (punctual.length === 0 && !hasMap) return;
+      if (punctual.length === 0 && manifest?.mapAvailable !== true) return;
       if (appliedJobIdRef.current === next.id) return;
       appliedJobIdRef.current = next.id;
-      const mode = manifest?.executionMode;
-      const exportMeta = (manifest as { exportMeta?: { mode?: string } } | null)
-        ?.exportMeta;
-      const usedBoxExport = exportMeta?.mode === "export_box";
-      if (punctual.length > 0) {
-        applyPunctualLpToWorkplaces({
-          jobId: next.id,
-          revisionId: next.revisionId,
-          // Honesty: fixture/demo vs box export from revision AABB.
-          fixtureReplay:
-            mode === "fixture_replay" ||
-            (mode === "github_actions_spps" && !usedBoxExport),
-          punctual,
-        });
-      }
-      const grid = (
-        manifest as {
-          grid?: {
-            originX?: number;
-            originY?: number;
-            cellSizeM?: number;
-            cellSizeYM?: number;
-            nx?: number;
-            ny?: number;
-            zM?: number;
-            lpDb?: (number | null)[];
-          } | null;
-        } | null
-      )?.grid;
-      if (
-        hasMap &&
-        grid &&
-        typeof grid.originX === "number" &&
-        typeof grid.originY === "number" &&
-        typeof grid.cellSizeM === "number" &&
-        typeof grid.nx === "number" &&
-        typeof grid.ny === "number" &&
-        Array.isArray(grid.lpDb)
-      ) {
-        applySurfaceMapFromManifest({
-          jobId: next.id,
-          revisionId: next.revisionId,
-          grid: {
-            originX: grid.originX,
-            originY: grid.originY,
-            cellSizeM: grid.cellSizeM,
-            cellSizeYM: grid.cellSizeYM,
-            nx: grid.nx,
-            ny: grid.ny,
-            zM: grid.zM,
-            lpDb: grid.lpDb,
-          },
-        });
-      } else {
-        // Drop legacy sparse blotch from a prior job.
-        setPlanSurfaceMap(null);
-      }
+      applyJobResultToPlan(next);
     },
-    [
-      applyPunctualLpToWorkplaces,
-      applySurfaceMapFromManifest,
-      setPlanSurfaceMap,
-    ],
+    [applyJobResultToPlan],
   );
 
   const refreshJob = useCallback(
@@ -302,20 +231,9 @@ export function CalculationsPage() {
   };
 
   const manifest = job?.resultManifest ?? null;
-  const manifestGrid = (
-    manifest as {
-      grid?: { nx?: number; ny?: number; lpDb?: (number | null)[] } | null;
-    } | null
-  )?.grid;
-  const mapRejectReason =
-    manifest?.mapAvailable === true
-      ? surfaceGridRejectReason({
-          nx: manifestGrid?.nx ?? 0,
-          ny: manifestGrid?.ny ?? 0,
-          lpDb: manifestGrid?.lpDb ?? [],
-        })
-      : null;
-  const mapAvailable = manifest?.mapAvailable === true && mapRejectReason === null;
+  const surfaceMap = surfaceMapFromManifest(manifest);
+  const mapRejectReason = surfaceMap && !surfaceMap.ok ? surfaceMap.reason : null;
+  const mapAvailable = surfaceMap?.ok === true;
   const punctual = confirmedReceivers(manifest?.punctualReceivers);
   const hasLevels = punctual.length > 0;
   const execMode = manifest?.executionMode;
@@ -474,6 +392,7 @@ export function CalculationsPage() {
                     <tr>
                       <th scope="col">{ru.calculations.receiver}</th>
                       <th scope="col">{ru.calculations.energy}</th>
+                      <th scope="col">{ru.calculations.laDb}</th>
                       <th scope="col">{ru.calculations.lpDb}</th>
                     </tr>
                   </thead>
@@ -490,7 +409,8 @@ export function CalculationsPage() {
                         <td className="mono-wrap">
                           {formatEnergy(p.energySumGlobal)}
                         </td>
-                        <td>{formatLp(p.lpDbGlobal)}</td>
+                        <td>{formatLevel(p.laDbGlobal, "дБА")}</td>
+                        <td>{formatLevel(p.lpDbGlobal, "дБ")}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -505,20 +425,7 @@ export function CalculationsPage() {
               {mapAvailable ? (
                 <>
                   <p className="page-meta">{ru.calculations.mapReady}</p>
-                  <p className="page-meta">
-                    {ru.calculations.mapLegend}:{" "}
-                    {(() => {
-                      const g = (
-                        manifest as {
-                          grid?: { lpDb?: (number | null)[] } | null;
-                        } | null
-                      )?.grid;
-                      const scale = g?.lpDb ? computeLpScale(g.lpDb) : null;
-                      return scale
-                        ? formatLpScaleLegend(scale)
-                        : ru.calculations.mapLegendHint;
-                    })()}
-                  </p>
+                  <NoiseScaleLegend caption={ru.calculations.mapLegend} />
                   <p className="page-hint">{ru.calculations.mapLegendHint}</p>
                 </>
               ) : mapRejectReason ? (

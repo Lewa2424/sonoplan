@@ -5,10 +5,13 @@ import {
   buildDiffuseFieldInput,
   estimateLpAt,
   estimateLpGrid,
+  planCutHeightM,
   stripClosingDuplicate,
+  workplaceReceiverZ,
   type ModelSnapshot,
 } from "@sonoplan/domain";
 import { useElementSize } from "../hooks/useElementSize";
+import { NoiseScaleLegend } from "./NoiseScaleLegend";
 import { ru } from "../i18n/ru";
 import {
   contourAngleLabelPositions,
@@ -20,12 +23,7 @@ import {
   openPolylineCornerAngleDeg,
   POLYGON_CLOSE_SNAP_M,
 } from "../model/contourHelpers";
-import {
-  computeLpScale,
-  formatLpScaleLegend,
-  surfaceMapToCanvas,
-  surfaceMapToDataUrl,
-} from "../model/lpPalette";
+import { surfaceMapToCanvas, surfaceMapToDataUrl } from "../model/lpPalette";
 import { useEditorStore } from "../store/editorStore";
 
 const STAGE_PAD = 24;
@@ -77,7 +75,8 @@ interface DragOverride {
   readonly y: number;
 }
 
-const DEFAULT_ESTIMATE_Z_M = 1.5;
+/** Одинаково для оценки и SPPS: слои отличаются только источником данных. */
+const MAP_LAYER_OPACITY = 0.9;
 
 function withDragOverride(
   model: ModelSnapshot,
@@ -102,12 +101,6 @@ function withDragOverride(
         : w,
     ),
   };
-}
-
-function receiverZ(w: ModelSnapshot["workplaces"][number]): number {
-  const h = w.receiverHeightM.value;
-  if (h !== null && Number.isFinite(h) && h > 0) return h;
-  return w.position.z > 0.05 ? w.position.z : DEFAULT_ESTIMATE_Z_M;
 }
 
 export function PlanCanvas(_props: PlanCanvasProps) {
@@ -259,20 +252,14 @@ export function PlanCanvas(_props: PlanCanvasProps) {
     toolMode === "drawPolygon" || placeMode !== "none" || placingCatalog;
   const stale = isPlanResultStale();
 
-  const mapScale = useMemo(() => {
-    if (!planSurfaceMap || stale) return null;
-    return computeLpScale(planSurfaceMap.lpDb);
-  }, [planSurfaceMap, stale]);
-
   const heatmapUrl = useMemo(() => {
-    if (!planSurfaceMap || stale || !mapScale) return null;
+    if (!planSurfaceMap || stale) return null;
     return surfaceMapToDataUrl({
       nx: planSurfaceMap.nx,
       ny: planSurfaceMap.ny,
-      lpDb: planSurfaceMap.lpDb,
-      scale: mapScale,
+      lpDb: planSurfaceMap.laDb,
     });
-  }, [planSurfaceMap, stale, mapScale]);
+  }, [planSurfaceMap, stale]);
 
   useEffect(() => {
     if (!heatmapUrl) {
@@ -290,7 +277,7 @@ export function PlanCanvas(_props: PlanCanvasProps) {
     if (sppsJobId) setPreferEstimate(false);
   }, [sppsJobId]);
 
-  const sppsMapFresh = Boolean(heatmapImg && planSurfaceMap && mapScale && !stale);
+  const sppsMapFresh = Boolean(heatmapImg && planSurfaceMap && !stale);
   const showSppsMap = sppsMapFresh && !preferEstimate && !dragOverride;
 
   const estimateModel = useMemo(
@@ -301,34 +288,25 @@ export function PlanCanvas(_props: PlanCanvasProps) {
     () => buildDiffuseFieldInput(estimateModel),
     [estimateModel],
   );
-  const estimateZ = useMemo(() => {
-    const zs = estimateModel.workplaces.map(receiverZ);
-    return zs.length > 0
-      ? zs.reduce((a, b) => a + b, 0) / zs.length
-      : DEFAULT_ESTIMATE_Z_M;
-  }, [estimateModel.workplaces]);
+  // Same cut plane as the SPPS coupe for this model (export rule in domain).
+  const estimateZ = useMemo(() => planCutHeightM(estimateModel), [estimateModel]);
   const estimateGrid = useMemo(
     () =>
-      estimateInput.ok && !showSppsMap
-        ? estimateLpGrid(estimateInput.input, estimateZ)
+      estimateInput.ok && estimateZ !== null && !showSppsMap
+        ? estimateLpGrid(estimateInput.input, estimateZ, "A")
         : null,
     [estimateInput, estimateZ, showSppsMap],
   );
-  const estimateScale = useMemo(
-    () => (estimateGrid ? computeLpScale(estimateGrid.lpDb) : null),
-    [estimateGrid],
-  );
   const estimateCanvas = useMemo(
     () =>
-      estimateGrid && estimateScale
+      estimateGrid
         ? surfaceMapToCanvas({
             nx: estimateGrid.nx,
             ny: estimateGrid.ny,
             lpDb: estimateGrid.lpDb,
-            scale: estimateScale,
           })
         : null,
-    [estimateGrid, estimateScale],
+    [estimateGrid],
   );
   const estimateByWorkplaceId = useMemo(() => {
     const out = new Map<string, number>();
@@ -338,7 +316,8 @@ export function PlanCanvas(_props: PlanCanvasProps) {
         estimateInput.input,
         w.position.x,
         w.position.y,
-        receiverZ(w),
+        workplaceReceiverZ(w),
+        "A",
       );
       if (lp !== null) out.set(w.id, lp);
     }
@@ -538,16 +517,19 @@ export function PlanCanvas(_props: PlanCanvasProps) {
       {stale && (planLpOverlay || planSurfaceMap) ? (
         <p className="banner banner--warn">{ru.model.staleLp}</p>
       ) : null}
-      {showSppsMap && mapScale ? (
-        <p className="page-meta plan-map-scale" aria-live="polite">
-          {ru.calculations.mapScaleOnPlan}: {formatLpScaleLegend(mapScale)}
-        </p>
-      ) : estimateCanvas && estimateScale ? (
+      {showSppsMap && planSurfaceMap ? (
+        <NoiseScaleLegend
+          caption={
+            planSurfaceMap.zM !== null
+              ? `${ru.calculations.mapScaleOnPlan}, ${ru.calculations.cutAtHeight} ${planSurfaceMap.zM.toFixed(2)} м`
+              : ru.calculations.mapScaleOnPlan
+          }
+        />
+      ) : estimateCanvas && estimateGrid ? (
         <>
-          <p className="page-meta plan-map-scale" aria-live="polite">
-            {ru.model.estimateLegend}, {ru.model.estimateAtHeight}{" "}
-            {estimateZ.toFixed(1)} м: {formatLpScaleLegend(estimateScale)}
-          </p>
+          <NoiseScaleLegend
+            caption={`${ru.model.estimateLegend}, ${ru.model.estimateAtHeight} ${estimateGrid.zM.toFixed(2)} м`}
+          />
           <p className="page-hint plan-estimate-note">{ru.model.estimateNote}</p>
         </>
       ) : !estimateInput.ok && !showSppsMap ? (
@@ -609,7 +591,7 @@ export function PlanCanvas(_props: PlanCanvasProps) {
               width={estimateGrid.nx * estimateGrid.cellSizeM * transform.scale}
               height={estimateGrid.ny * estimateGrid.cellSizeM * transform.scale}
               listening={false}
-              opacity={0.75}
+              opacity={MAP_LAYER_OPACITY}
             />
           ) : null}
           {showSppsMap && heatmapImg && planSurfaceMap ? (
@@ -629,7 +611,7 @@ export function PlanCanvas(_props: PlanCanvasProps) {
                 planSurfaceMap.ny * planSurfaceMap.cellSizeYM * transform.scale
               }
               listening={false}
-              opacity={0.85}
+              opacity={MAP_LAYER_OPACITY}
             />
           ) : null}
           {toolMode !== "drawPolygon" &&
@@ -914,12 +896,12 @@ export function PlanCanvas(_props: PlanCanvasProps) {
                 (dragOverride.kind === "source" || dragOverride.id === wp.id);
               const lpLabel =
                 !draggingThis && typeof lp === "number" && Number.isFinite(lp)
-                  ? `${lp.toFixed(1)} дБ`
+                  ? `${lp.toFixed(1)} ${planLpOverlay?.weighting === "A" ? "дБА" : "дБ"}`
                   : null;
               const est = estimateByWorkplaceId.get(wp.id);
               const estLabel =
                 lpLabel === null && est !== undefined
-                  ? `${ru.model.estimatePrefix}${est.toFixed(1)} дБ`
+                  ? `${ru.model.estimatePrefix}${est.toFixed(1)} дБА`
                   : null;
               return (
                 <Group

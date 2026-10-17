@@ -7,6 +7,7 @@ in the returned meta. Full polygon extrusion + TetGen is a later stage.
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -21,8 +22,11 @@ FREQS = [
     1600, 1250, 1000, 800, 630, 500, 400, 315, 250, 200, 160, 125, 100, 80,
     63, 50,
 ]
-CALC_BANDS = {100, 1000}
+# Octaves of the model spectrum (apps/web STANDARD_BANDS_HZ); dBA needs all of them.
+CALC_BANDS = {63, 125, 250, 500, 1000, 2000, 4000, 8000}
 REF_CUBE_M = 5.0
+# SPPS keeps cells × time steps × bands × coupes in RAM; cap the cut-map size.
+MAX_COUPE_CELLS = 20_000
 # SPPS links a tetra to the coupe only if a tetra edge pierces the parallelogram
 # strictly inside (float32, u/v in [0,1)). Room-sized coupe edges lie exactly on
 # the walls, so tetras whose plane section touches only wall edges were never
@@ -223,6 +227,12 @@ def _coupe_z_away_from_sources(
     return min(max(lowest - min_sep_m, lo), hi)
 
 
+def coupe_resolution_m(width: float, depth: float) -> float:
+    """Cut-map cell ~1/80 of the shorter side in [0.125, 0.25] m, ≤ MAX_COUPE_CELLS."""
+    res = min(0.25, max(0.125, min(width, depth) / 80.0))
+    return max(res, math.sqrt(width * depth / MAX_COUPE_CELLS))
+
+
 def _lw_for_freq(lw_by_band: dict[str, float], freq: int) -> float:
     if str(freq) in lw_by_band:
         return float(lw_by_band[str(freq)])
@@ -299,7 +309,8 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
         "direct_calc": "0",
         "duree_simulation": "0.5",
         "output_recp_bysource": "0",
-        "output_recs_byfreq": "0",
+        # Per-band cut files → A-weighting once per band in decode.
+        "output_recs_byfreq": "1",
         "surf_receiv_method": "0",
         "random_seed": "1",
         "computation_method": "1",
@@ -400,8 +411,7 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
     )
     coupe_z = min(max(coupe_z, 0.1), height - 0.05)
     payload["coupeZM"] = coupe_z
-    # Cell size: ~0.5 m, capped so grid stays tractable on large rooms.
-    resolution = min(0.5, max(0.25, min(width, depth) / 40.0))
+    resolution = coupe_resolution_m(width, depth)
     recepteurss = ET.SubElement(root, "recepteurss")
     coupe = ET.SubElement(recepteurss, "recepteur_surfacique_coupe")
     coupe.set("id", "7001")
@@ -492,6 +502,11 @@ def write_spps_workdir(
         (
             f"Horizontal coupe at z={float(payload.get('coupeZM') or 0):.2f} m "
             "(offset from source Z so SPPS can record plane crossings)."
+        ),
+        (
+            "SPPS bands: octaves "
+            + ", ".join(str(f) for f in sorted(CALC_BANDS))
+            + " Hz; cut map saved per band for dBA (A-weighting once per band)."
         ),
     ]
     if payload.get("absorptionByBand"):

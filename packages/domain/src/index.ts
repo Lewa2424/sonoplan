@@ -82,3 +82,7 @@ export {
   estimateLpAt,
   estimateLpGrid,
 } from "./diffuseFieldEstimate.js";
+
+export { type LevelWeighting, aWeightingDb } from "./aWeighting.js";
+
+export { workplaceReceiverZ, planCutHeightM } from "./planCut.js";
