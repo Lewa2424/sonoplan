@@ -19,7 +19,12 @@ from sonoplan_api.schemas import (
     RevisionCreate,
     RevisionCreated,
 )
-from sonoplan_api.snapshot import compute_snapshot_hash, default_draft_body, extract_model_from_draft
+from sonoplan_api.snapshot import (
+    CURRENT_SCHEMA_VERSION,
+    compute_snapshot_hash,
+    default_draft_body,
+    extract_model_from_draft,
+)
 
 router = APIRouter(tags=["projects"])
 
@@ -53,7 +58,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db)) -> Pro
         owner_id=owner_id,
         name=payload.name,
         access_policy=payload.accessPolicy,
-        schema_version="1.0",
+        schema_version=CURRENT_SCHEMA_VERSION,
         current_revision_id=None,
         created_at=_utcnow(),
         updated_at=_utcnow(),
@@ -127,6 +132,9 @@ def patch_draft(
     if project is not None and isinstance(draft.body.get("name"), str):
         project.name = draft.body["name"]
         project.updated_at = _utcnow()
+    draft_version = (draft.body.get("model") or {}).get("schemaVersion")
+    if project is not None and isinstance(draft_version, str):
+        project.schema_version = draft_version
     db.commit()
     db.refresh(draft)
     response.headers["ETag"] = f'"{draft.etag}"'
@@ -157,7 +165,7 @@ def create_revision(
         id=str(uuid.uuid4()),
         project_id=project_id,
         parent_id=project.current_revision_id,
-        schema_version="1.0",
+        schema_version=str(model["schemaVersion"]),
         author_id=payload.authorId or project.owner_id,
         created_at=_utcnow(),
         snapshot_hash=snapshot_hash,

@@ -1,18 +1,23 @@
 import {
   PROJECT_SCHEMA_VERSION,
+  ROOM_SURFACE_KINDS,
   createUuid,
+  flatLwSpectrumForLwA,
+  migrateModelSnapshot,
   type ModelSnapshot,
   type OctaveBandLevel,
   type ProjectDraft,
   type Room,
+  type RoomSurfaceKind,
   type SolidObstacle,
   type Source,
   type Workplace,
 } from "@sonoplan/domain";
 import { rectangleContour } from "./contourHelpers";
 import {
+  DEFAULT_SURFACE_MATERIAL_KEYS,
+  MATERIAL_CATALOG_VERSION,
   createMaterialVersionFromCatalog,
-  materialByKey,
 } from "./materialCatalog";
 import {
   equipmentByKey,
@@ -26,13 +31,16 @@ export const STANDARD_BANDS_HZ = [
   63, 125, 250, 500, 1000, 2000, 4000, 8000,
 ] as const;
 
-/** quantity: sound_power (Lw), unit dB re 1 pW — не Lp. */
-export function uniformLwSpectrum(levelDb: number): OctaveBandLevel[] {
-  return STANDARD_BANDS_HZ.map((bandHz) => ({
-    bandHz,
-    level: { value: levelDb, unit: "dB" as const },
-  }));
+/**
+ * Ровный октавный спектр Lw (дБ re 1 pW, не Lp) с заданным суммарным LwA, дБА.
+ * Каждая из 8 октав = LwA − 7,0 дБ.
+ */
+export function flatLwSpectrumFromLwA(lwADb: number): OctaveBandLevel[] {
+  return flatLwSpectrumForLwA(lwADb, STANDARD_BANDS_HZ);
 }
+
+/** Типовой источник без паспорта: LwA 97 дБА (≈90 дБ в каждой октаве). */
+export const DEFAULT_SOURCE_LWA_DB = 97;
 
 export function createEmptyModel(): ModelSnapshot {
   return {
@@ -54,7 +62,7 @@ export function createDefaultWorkshopRoom(
     id: createUuid(),
     floorContour: rectangleContour(widthM, depthM),
     heightM: { value: heightM, unit: "m" },
-    materialVersionId: null,
+    surfaceMaterials: { floor: null, walls: null, ceiling: null },
     materialNullReason: "not_assigned_mvp",
   };
 }
@@ -63,14 +71,14 @@ export function createSourceAt(
   x: number,
   y: number,
   z: number,
-  lwDb = 90,
+  lwADb = DEFAULT_SOURCE_LWA_DB,
   name = "Источник",
 ): Source {
   return {
     id: createUuid(),
     name,
     position: { x, y, z },
-    powerSpectrumLw: uniformLwSpectrum(lwDb),
+    powerSpectrumLw: flatLwSpectrumFromLwA(lwADb),
     directivityId: null,
     weight: null,
     weightNullReason: "not_used_mvp",
@@ -135,35 +143,46 @@ export function createSolidAt(
   };
 }
 
-export function createDefaultMaterial(): ReturnType<
-  typeof createMaterialVersionFromCatalog
-> {
-  return createMaterialVersionFromCatalog("concrete");
-}
-
-export function ensureRoomMaterial(
+/**
+ * Назначить материал каталога группе ограждений первого помещения.
+ * Версия того же ключа текущего каталога переиспользуется; материалы, на которые
+ * больше не ссылается ни одна поверхность, удаляются из модели.
+ */
+export function assignSurfaceMaterial(
   model: ModelSnapshot,
-  catalogKey = "concrete",
+  surface: RoomSurfaceKind,
+  catalogKey: string,
 ): ModelSnapshot {
   const room = model.rooms[0];
   if (!room) return model;
-  if (room.materialVersionId && model.materials.length > 0) {
-    return model;
-  }
-  const mat = createMaterialVersionFromCatalog(
-    materialByKey(catalogKey)?.catalogKey ?? "concrete",
+  const existing = model.materials.find(
+    (m) => m.catalogKey === catalogKey && m.version === MATERIAL_CATALOG_VERSION,
   );
+  const mat = existing ?? createMaterialVersionFromCatalog(catalogKey);
+  const surfaceMaterials = { ...room.surfaceMaterials, [surface]: mat.id };
+  const used = new Set(Object.values(surfaceMaterials));
+  const materials = model.materials.filter((m) => used.has(m.id));
   return {
     ...model,
-    materials: [mat, ...model.materials.filter((m) => m.id !== mat.id)],
+    materials: existing ? materials : [...materials, mat],
     rooms: [
-      {
-        ...room,
-        materialVersionId: mat.id,
-        materialNullReason: null,
-      },
+      { ...room, surfaceMaterials, materialNullReason: null },
+      ...model.rooms.slice(1),
     ],
   };
+}
+
+/** Поверхности без материала (или с битой ссылкой) получают материал по умолчанию. */
+export function ensureRoomSurfaceMaterials(model: ModelSnapshot): ModelSnapshot {
+  let next = model;
+  for (const surface of ROOM_SURFACE_KINDS) {
+    const room = next.rooms[0];
+    if (!room) return next;
+    const id = room.surfaceMaterials[surface];
+    if (id !== null && next.materials.some((m) => m.id === id)) continue;
+    next = assignSurfaceMaterial(next, surface, DEFAULT_SURFACE_MATERIAL_KEYS[surface]);
+  }
+  return next;
 }
 
 export function workplaceNearEquipment(
@@ -177,23 +196,18 @@ export function workplaceNearEquipment(
 }
 
 export function createOfflineDraft(name: string): ProjectDraft {
-  const mat = createDefaultMaterial();
-  const room: Room = {
-    ...createDefaultWorkshopRoom(),
-    materialVersionId: mat.id,
-    materialNullReason: null,
-  };
+  const room: Room = createDefaultWorkshopRoom();
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name,
-    model: {
-      ...createEmptyModel(),
-      rooms: [room],
-      materials: [mat],
-    },
+    model: ensureRoomSurfaceMaterials({ ...createEmptyModel(), rooms: [room] }),
   };
 }
 
+/**
+ * Draft body с сервера → текущая схема. Черновик 1.0 мигрирует в памяти;
+ * на сервере он остаётся 1.0 до следующего сохранения.
+ */
 export function parseDraftBody(raw: unknown): ProjectDraft {
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid draft body");
@@ -202,21 +216,14 @@ export function parseDraftBody(raw: unknown): ProjectDraft {
   const modelRaw = body.model;
   const model =
     modelRaw && typeof modelRaw === "object"
-      ? (modelRaw as ModelSnapshot)
+      ? migrateModelSnapshot({
+          schemaVersion: body.schemaVersion,
+          ...(modelRaw as Record<string, unknown>),
+        })
       : createEmptyModel();
   return {
-    schemaVersion:
-      typeof body.schemaVersion === "string"
-        ? (body.schemaVersion as ProjectDraft["schemaVersion"])
-        : PROJECT_SCHEMA_VERSION,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
     name: typeof body.name === "string" ? body.name : "Без имени",
-    model: {
-      schemaVersion: model.schemaVersion ?? PROJECT_SCHEMA_VERSION,
-      rooms: model.rooms ?? [],
-      sources: model.sources ?? [],
-      workplaces: model.workplaces ?? [],
-      materials: model.materials ?? [],
-      solids: model.solids ?? [],
-    },
+    model,
   };
 }

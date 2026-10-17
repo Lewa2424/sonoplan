@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    schemaVersion: str = "1.0"
+    schemaVersion: str = "1.1"
 
 
 class CapabilitiesResponse(BaseModel):

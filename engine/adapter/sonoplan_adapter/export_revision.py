@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .cbin_io import scale_cbin_file_inplace
+from .cbin_io import assign_box_surface_materials_inplace, scale_cbin_file_inplace
 from .mbin_io import scale_mbin_file_inplace
 
 FREQS = [
@@ -32,6 +32,12 @@ MAX_COUPE_CELLS = 20_000
 # the walls, so tetras whose plane section touches only wall edges were never
 # linked and got no cut-map energy (wedge-shaped empty zones). Overhang fixes it.
 COUPE_WALL_OVERHANG_M = 0.01
+# Payload 1.1: surfaceAbsorptionByBand; 1.0 (single absorptionByBand) still read.
+EXPORT_PAYLOAD_VERSION = "1.1"
+SURFACE_KINDS = ("floor", "walls", "ceiling")
+# type_surface ids ↔ mesh.cbin idMaterial; walls = 0 like the fixture default.
+SURFACE_MATERIAL_IDS = {"walls": 0, "floor": 1, "ceiling": 2}
+DEFAULT_ALPHA = 0.02
 
 
 @dataclass(frozen=True)
@@ -104,29 +110,37 @@ def _is_axis_aligned_rectangle(
     return True
 
 
-def _absorption_by_band_from_snapshot(
-    snapshot: dict[str, Any],
-) -> dict[str, float]:
-    """Map bandHz → α from room material; empty → caller uses default."""
-    rooms = snapshot.get("rooms") or []
-    materials = snapshot.get("materials") or []
-    if not rooms or not materials:
-        return {}
-    mat_id = rooms[0].get("materialVersionId")
-    mat = None
-    for m in materials:
-        if m.get("id") == mat_id:
-            mat = m
-            break
-    if mat is None:
-        mat = materials[0]
+def _alpha_bands(material: dict[str, Any] | None) -> dict[str, float]:
     out: dict[str, float] = {}
-    for band in mat.get("absorptionByBand") or []:
+    for band in (material or {}).get("absorptionByBand") or []:
         hz = int(band.get("bandHz") or 0)
         alpha = band.get("alpha")
         if hz and alpha is not None:
             out[str(hz)] = float(alpha)
     return out
+
+
+def surface_absorption_from_snapshot(
+    snapshot: dict[str, Any],
+) -> dict[str, dict[str, float]]:
+    """Map surface kind → (bandHz → α). Empty dict for a surface → default α.
+
+    Schema 1.1: ``room.surfaceMaterials`` per floor / walls / ceiling.
+    Schema 1.0 (stored revisions): one ``room.materialVersionId`` for every
+    surface, else the first material — the 1.0 export rule, kept unchanged.
+    """
+    rooms = snapshot.get("rooms") or []
+    materials = snapshot.get("materials") or []
+    by_id = {m.get("id"): m for m in materials}
+    room = rooms[0] if rooms else {}
+    if snapshot.get("schemaVersion", "1.0") == "1.0":
+        mat = by_id.get(room.get("materialVersionId")) or (
+            materials[0] if materials else None
+        )
+        bands = _alpha_bands(mat)
+        return {kind: dict(bands) for kind in SURFACE_KINDS}
+    surfaces = room.get("surfaceMaterials") or {}
+    return {kind: _alpha_bands(by_id.get(surfaces.get(kind))) for kind in SURFACE_KINDS}
 
 
 def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -177,7 +191,7 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
     )
     solids = snapshot.get("solids") or []
     return {
-        "schemaVersion": "1.0",
+        "schemaVersion": EXPORT_PAYLOAD_VERSION,
         "box": {
             "widthM": width,
             "depthM": depth,
@@ -188,7 +202,7 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
         },
         "sources": sources,
         "workplaces": workplaces,
-        "absorptionByBand": _absorption_by_band_from_snapshot(snapshot),
+        "surfaceAbsorptionByBand": surface_absorption_from_snapshot(snapshot),
         "coupeZM": coupe_z,
         "solidCount": len(solids),
     }
@@ -248,7 +262,7 @@ def _alpha_for_freq(absorb_by_band: dict[str, float], freq: int) -> float:
     if str(freq) in absorb_by_band:
         return float(absorb_by_band[str(freq)])
     if not absorb_by_band:
-        return 0.02
+        return DEFAULT_ALPHA
     keys = sorted(int(k) for k in absorb_by_band.keys())
     nearest = min(keys, key=lambda k: abs(k - freq))
     return float(absorb_by_band[str(nearest)])
@@ -264,6 +278,15 @@ def _bfreq_absorb(absorb_by_band: dict[str, float]) -> list[ET.Element]:
         el.set("loi", "0")
         nodes.append(el)
     return nodes
+
+
+def payload_surface_absorption(payload: dict[str, Any]) -> dict[str, dict[str, float]]:
+    """Per-surface α from payload 1.1, or the single 1.0 ``absorptionByBand``."""
+    surfaces = payload.get("surfaceAbsorptionByBand")
+    if isinstance(surfaces, dict):
+        return {kind: dict(surfaces.get(kind) or {}) for kind in SURFACE_KINDS}
+    legacy = dict(payload.get("absorptionByBand") or {})
+    return {kind: dict(legacy) for kind in SURFACE_KINDS}
 
 
 def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
@@ -348,14 +371,15 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
     }.items():
         atm.set(k, v)
 
-    absorb_by_band = dict(payload.get("absorptionByBand") or {})
     mats = ET.SubElement(root, "surface_absorption_enum")
-    ts = ET.SubElement(mats, "type_surface")
-    ts.set("id", "0")
-    ts.set("resistivite", "100")
-    ts.set("side_material", "1")
-    for child in _bfreq_absorb(absorb_by_band):
-        ts.append(child)
+    for kind, absorb_by_band in payload_surface_absorption(payload).items():
+        ts = ET.SubElement(mats, "type_surface")
+        ts.set("id", str(SURFACE_MATERIAL_IDS[kind]))
+        ts.set("name", kind)
+        ts.set("resistivite", "100")
+        ts.set("side_material", "1")
+        for child in _bfreq_absorb(absorb_by_band):
+            ts.append(child)
 
     ET.SubElement(root, "subdomains")
     sources_el = ET.SubElement(root, "sources")
@@ -471,6 +495,11 @@ def write_spps_workdir(
         height_m=height,
         ref_size=REF_CUBE_M,
     )
+    face_counts = assign_box_surface_materials_inplace(
+        out_dir / "mesh.cbin", height_m=height, material_ids=SURFACE_MATERIAL_IDS
+    )
+    if any(face_counts[kind] == 0 for kind in SURFACE_KINDS):
+        raise ValueError(f"box mesh surface classification failed: {face_counts}")
 
     tree = build_config_xml(payload)
     tree.write(out_dir / "config.xml", encoding="utf-8", xml_declaration=True)
@@ -490,10 +519,21 @@ def write_spps_workdir(
             + " Hz; cut map saved per band for dBA (A-weighting once per band)."
         ),
     ]
-    if payload.get("absorptionByBand"):
-        notes.append("Surface absorption α from revision materials (estimated catalog OK).")
-    else:
-        notes.append("Surface absorption default α=0.02 (no material on revision).")
+    surface_alpha = payload_surface_absorption(payload)
+    from_revision = [k for k in SURFACE_KINDS if surface_alpha[k]]
+    defaulted = [k for k in SURFACE_KINDS if not surface_alpha[k]]
+    if from_revision:
+        notes.append(
+            "Surface absorption α per octave from revision materials: "
+            + ", ".join(from_revision)
+            + " (separate SPPS type_surface each; estimated catalog OK)."
+        )
+    if defaulted:
+        notes.append(
+            f"Surface absorption default α={DEFAULT_ALPHA} (no material on revision): "
+            + ", ".join(defaulted)
+            + "."
+        )
     solid_count = int(payload.get("solidCount") or 0)
     if solid_count > 0:
         notes.append(

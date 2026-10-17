@@ -1,11 +1,15 @@
 export {
   PROJECT_SCHEMA_VERSION,
+  LEGACY_PROJECT_SCHEMA_VERSIONS,
   type ProjectSchemaVersion,
+  type LegacyProjectSchemaVersion,
   type UtcIsoDateTime,
   type Project,
   type Revision,
   type FloorVertex,
   type Room,
+  type RoomSurfaceKind,
+  type RoomSurfaceMaterials,
   type MaterialVersion,
   type AbsorptionBand,
   type SolidObstacle,
@@ -84,5 +88,19 @@ export {
 } from "./diffuseFieldEstimate.js";
 
 export { type LevelWeighting, aWeightingDb } from "./aWeighting.js";
+
+export { totalLwA, flatLwSpectrumForLwA } from "./soundPower.js";
+
+export {
+  ROOM_SURFACE_KINDS,
+  polygonAreaAndPerimeter,
+  roomSurfaceAreasM2,
+  roomSurfaceMaterial,
+} from "./roomSurfaces.js";
+
+export {
+  UnsupportedSchemaVersionError,
+  migrateModelSnapshot,
+} from "./schemaMigration.js";
 
 export { workplaceReceiverZ, planCutHeightM } from "./planCut.js";

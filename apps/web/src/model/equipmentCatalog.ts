@@ -1,15 +1,15 @@
 import type { OctaveBandLevel } from "@sonoplan/domain";
-import { STANDARD_BANDS_HZ, uniformLwSpectrum } from "./factoryModel";
+import { STANDARD_BANDS_HZ, flatLwSpectrumFromLwA } from "./factoryModel";
 
 /**
- * Каталог оборудования MVP: оценочные Lw (дБ re 1 pW), не паспортные.
- * Полосы — октавы STANDARD_BANDS_HZ; flat = одинаковый уровень во всех.
+ * Каталог оборудования MVP: оценочные уровни мощности, не паспортные.
+ * Спектр — ровный по октавам STANDARD_BANDS_HZ с суммарным LwA из каталога.
  */
 export interface EquipmentCatalogEntry {
   readonly catalogKey: string;
   readonly nameRu: string;
-  /** Типовой Lw (все полосы), дБ. */
-  readonly lwFlatDb: number;
+  /** Типовой суммарный LwA, дБА re 1 pW (каждая октава = LwA − 7,0 дБ). */
+  readonly lwADb: number;
   /** Смещение РМ от источника, м (для «добавить РМ рядом»). */
   readonly workplaceOffsetM: number;
 }
@@ -18,43 +18,43 @@ export const EQUIPMENT_CATALOG: readonly EquipmentCatalogEntry[] = [
   {
     catalogKey: "lathe",
     nameRu: "Токарный станок",
-    lwFlatDb: 95,
+    lwADb: 95,
     workplaceOffsetM: 1.2,
   },
   {
     catalogKey: "milling",
     nameRu: "Фрезерный станок",
-    lwFlatDb: 98,
+    lwADb: 98,
     workplaceOffsetM: 1.2,
   },
   {
     catalogKey: "circular_saw",
     nameRu: "Циркулярка",
-    lwFlatDb: 105,
+    lwADb: 105,
     workplaceOffsetM: 1.0,
   },
   {
     catalogKey: "drill_press",
     nameRu: "Сверлильный станок",
-    lwFlatDb: 90,
+    lwADb: 90,
     workplaceOffsetM: 0.8,
   },
   {
     catalogKey: "industrial_vacuum",
     nameRu: "Промышленный пылесос",
-    lwFlatDb: 100,
+    lwADb: 100,
     workplaceOffsetM: 1.5,
   },
   {
     catalogKey: "compressor",
     nameRu: "Компрессор",
-    lwFlatDb: 102,
+    lwADb: 102,
     workplaceOffsetM: 1.5,
   },
   {
     catalogKey: "generic_machine",
     nameRu: "Оборудование (общее)",
-    lwFlatDb: 92,
+    lwADb: 92,
     workplaceOffsetM: 1.0,
   },
 ] as const;
@@ -110,7 +110,7 @@ export function lwSpectrumForEquipment(
   const entry = equipmentByKey(catalogKey) ?? EQUIPMENT_CATALOG[EQUIPMENT_CATALOG.length - 1]!;
   return {
     name: entry.nameRu,
-    spectrum: uniformLwSpectrum(entry.lwFlatDb),
+    spectrum: flatLwSpectrumFromLwA(entry.lwADb),
   };
 }
 

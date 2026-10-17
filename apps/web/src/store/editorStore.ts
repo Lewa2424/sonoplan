@@ -6,6 +6,7 @@ import {
   type LevelWeighting,
   type ModelSnapshot,
   type ProjectDraft,
+  type RoomSurfaceKind,
   type Uuid,
   type ValidationIssue,
 } from "@sonoplan/domain";
@@ -25,12 +26,13 @@ import {
   createOfflineDraft,
   createSolidAt,
   createSourceAt,
+  assignSurfaceMaterial,
   createWorkplaceAt,
-  ensureRoomMaterial,
+  ensureRoomSurfaceMaterials,
+  flatLwSpectrumFromLwA,
   parseDraftBody,
   workplaceNearEquipment,
 } from "../model/factoryModel";
-import { createMaterialVersionFromCatalog } from "../model/materialCatalog";
 import {
   surfaceMapFromManifest,
   type PlanSurfaceGrid,
@@ -139,9 +141,10 @@ interface EditorState {
   setPendingEquipment: (catalogKey: string | null) => void;
   setPendingSolid: (kind: SolidKind | null) => void;
   setPlaceWithWorkplace: (v: boolean) => void;
-  setRoomMaterial: (catalogKey: string) => void;
+  setRoomSurfaceMaterial: (surface: RoomSurfaceKind, catalogKey: string) => void;
   updateSelectedName: (name: string) => void;
-  updateSourceLw: (levelDb: number) => void;
+  /** Суммарный LwA, дБА → ровный октавный спектр Lw (каждая октава = LwA − 7 дБ). */
+  updateSourceLwA: (lwADb: number) => void;
   updateSourcePosition: (x: number, y: number, z: number) => void;
   updateWorkplacePosition: (x: number, y: number, z: number) => void;
   updateSolidHeight: (heightM: number) => void;
@@ -313,7 +316,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (model.rooms.length === 0) {
         model = { ...model, rooms: [createDefaultWorkshopRoom()] };
       }
-      model = ensureRoomMaterial(model);
+      model = ensureRoomSurfaceMaterials(model);
       const room = model.rooms[0];
       set({
         connectionMode: "online",
@@ -561,26 +564,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setPlaceWithWorkplace: (v) => set({ placeWithWorkplace: v }),
 
-  setRoomMaterial: (catalogKey) => {
+  setRoomSurfaceMaterial: (surface, catalogKey) => {
     const { model } = get();
-    const room = model.rooms[0];
-    if (!room) return;
-    const mat = createMaterialVersionFromCatalog(catalogKey);
-    const next = {
-      ...model,
-      materials: [
-        mat,
-        ...model.materials.filter((m) => m.id !== room.materialVersionId),
-      ],
-      rooms: [
-        {
-          ...room,
-          materialVersionId: mat.id,
-          materialNullReason: null,
-        },
-      ],
-    };
-    set({ model: next });
+    if (!model.rooms[0]) return;
+    set({ model: assignSurfaceMaterial(model, surface, catalogKey) });
     get().markDirty();
   },
 
@@ -618,10 +605,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     get().markDirty();
   },
 
-  updateSourceLw: (levelDb) => {
+  updateSourceLwA: (lwADb) => {
     const { selection, model } = get();
     if (!selection || selection.kind !== "source") return;
-    const bands = createSourceAt(0, 0, 0, levelDb).powerSpectrumLw;
+    const bands = flatLwSpectrumFromLwA(lwADb);
     set({
       model: {
         ...model,

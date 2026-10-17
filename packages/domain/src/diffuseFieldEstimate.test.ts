@@ -43,31 +43,55 @@ function model(
   ],
 ): ModelSnapshot {
   return {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     rooms: [
       {
         id: ROOM_ID,
         floorContour: contour,
         heightM: { value: 5, unit: "m" },
-        materialVersionId: MAT_ID,
+        surfaceMaterials: { floor: MAT_ID, walls: MAT_ID, ceiling: MAT_ID },
       },
     ],
     sources,
     workplaces: [],
-    materials: [
+    materials: [material(MAT_ID, alphaByBand)],
+    solids: [],
+  };
+}
+
+function material(id: ReturnType<typeof asUuid>, alphaByBand: Record<number, number | null>) {
+  return {
+    id,
+    catalogKey: "test",
+    name: "test",
+    version: "1",
+    estimated: true,
+    absorptionByBand: Object.entries(alphaByBand).map(([hz, a]) => ({
+      bandHz: Number(hz),
+      alpha: a,
+    })),
+  };
+}
+
+const FLOOR_ID = asUuid("00000000-0000-4000-8000-000000000003");
+const CEIL_ID = asUuid("00000000-0000-4000-8000-000000000004");
+
+/** Пол / стены / потолок с разными α (стены — MAT_ID). */
+function mixedModel(
+  floor: Record<number, number | null>,
+  walls: Record<number, number | null>,
+  ceiling: Record<number, number | null>,
+): ModelSnapshot {
+  const base = model([source(5, 5, 1.5, { 500: 100, 1000: 100 })], walls);
+  return {
+    ...base,
+    rooms: [
       {
-        id: MAT_ID,
-        catalogKey: "test",
-        name: "test",
-        version: "1",
-        estimated: true,
-        absorptionByBand: Object.entries(alphaByBand).map(([hz, a]) => ({
-          bandHz: Number(hz),
-          alpha: a,
-        })),
+        ...base.rooms[0]!,
+        surfaceMaterials: { floor: FLOOR_ID, walls: MAT_ID, ceiling: CEIL_ID },
       },
     ],
-    solids: [],
+    materials: [material(MAT_ID, walls), material(FLOOR_ID, floor), material(CEIL_ID, ceiling)],
   };
 }
 
@@ -163,6 +187,34 @@ describe("diffuse field estimate", () => {
     expect(
       buildDiffuseFieldInput(model([source(5, 5, 1, { 1000: null })], { 1000: 0.2 })),
     ).toEqual({ ok: false, reason: "no_sources" });
+  });
+
+  it("weights alpha by surface area of floor, walls and ceiling", () => {
+    // Пол 100 м²·0.1 + стены 200 м²·0.2 + потолок 100 м²·0.6 = 110 м² → ᾱ = 0.275.
+    // R = 400·0.275/0.725 = 151.724 м².
+    const inp = inputOf(mixedModel({ 1000: 0.1 }, { 1000: 0.2 }, { 1000: 0.6 }));
+    expect(inp.roomConstantByBandHz.get(1000)).toBeCloseTo((400 * 0.275) / 0.725, 9);
+  });
+
+  it("drops a band unless every surface knows alpha there", () => {
+    const inp = inputOf(
+      mixedModel({ 500: 0.1, 1000: 0.1 }, { 500: 0.2, 1000: 0.2 }, { 1000: 0.6, 500: null }),
+    );
+    expect(inp.bandsHz).toEqual([1000]);
+  });
+
+  it("is unavailable when any surface has no material", () => {
+    const base = model([source(5, 5, 1.5, { 1000: 90 })], { 1000: 0.2 });
+    const noCeiling: ModelSnapshot = {
+      ...base,
+      rooms: [
+        {
+          ...base.rooms[0]!,
+          surfaceMaterials: { floor: MAT_ID, walls: MAT_ID, ceiling: null },
+        },
+      ],
+    };
+    expect(buildDiffuseFieldInput(noCeiling)).toEqual({ ok: false, reason: "no_material" });
   });
 
   it("grid masks cells outside an L-shaped contour", () => {

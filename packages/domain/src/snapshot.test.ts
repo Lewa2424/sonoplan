@@ -28,7 +28,7 @@ function sampleSnapshot(overrides: Partial<ModelSnapshot> = {}): ModelSnapshot {
           { x: 0, y: 0 },
         ],
         heightM: { value: 4, unit: "m" },
-        materialVersionId: materialId,
+        surfaceMaterials: { floor: materialId, walls: materialId, ceiling: materialId },
       },
     ],
     sources: [
@@ -111,6 +111,17 @@ describe("snapshot serialize / hash", () => {
     expect(result.warnings.some((w) => w.code === "material_estimated")).toBe(
       true,
     );
+  });
+
+  it("validate blocks a room surface without material (α unknown ≠ 0)", () => {
+    const snap = sampleSnapshot();
+    const room = snap.rooms[0]!;
+    const result = validateModel({
+      ...snap,
+      rooms: [{ ...room, surfaceMaterials: { ...room.surfaceMaterials, ceiling: null } }],
+    });
+    const hits = result.errors.filter((e) => e.code === "room_surface_material_missing");
+    expect(hits.map((e) => e.path)).toEqual([`rooms/${room.id}/surfaceMaterials/ceiling`]);
   });
 
   it("validate blocks source inside solid", () => {

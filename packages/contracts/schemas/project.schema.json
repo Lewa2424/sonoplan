@@ -2,15 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sonoplan.local/schemas/project.schema.json",
   "title": "SonoPlanProjectDocument",
-  "description": "JSON Schema документа / снимка модели (DAT-001/005). STG-02: draft body и ModelSnapshot.",
+  "description": "JSON Schema документа / снимка модели (DAT-001/005). Текущая версия 1.1; 1.0 — только чтение старых черновиков/ревизий (миграция: room.materialVersionId → surfaceMaterials пола, стен и потолка).",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion"],
   "properties": {
-    "schemaVersion": {
-      "type": "string",
-      "const": "1.0"
-    },
+    "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
     "name": {
       "type": "string",
       "description": "Имя в draft; не входит в snapshotHash"
@@ -49,7 +46,7 @@
         "id": { "type": "string", "format": "uuid" },
         "projectId": { "type": "string", "format": "uuid" },
         "parentId": { "type": ["string", "null"], "format": "uuid" },
-        "schemaVersion": { "type": "string", "const": "1.0" },
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
         "authorId": { "type": "string", "format": "uuid" },
         "createdAt": { "type": "string", "format": "date-time" },
         "snapshotHash": {
@@ -82,12 +79,17 @@
     }
   },
   "$defs": {
+    "schemaVersion": {
+      "type": "string",
+      "enum": ["1.0", "1.1"],
+      "description": "Писатели выдают 1.1; 1.0 принимается для чтения и мигрируется"
+    },
     "modelSnapshot": {
       "type": "object",
       "required": ["schemaVersion", "rooms", "sources", "workplaces", "materials", "solids"],
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "type": "string", "const": "1.0" },
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
         "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
         "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
         "workplaces": { "type": "array", "items": { "$ref": "#/$defs/workplace" } },
@@ -140,9 +142,28 @@
           }
         },
         "heightM": { "$ref": "#/$defs/quantity" },
-        "materialVersionId": { "type": ["string", "null"], "format": "uuid" },
+        "surfaceMaterials": {
+          "type": "object",
+          "description": "1.1: materialVersion.id для пола, всех стен и потолка/кровли; null = не назначен (блокирующая ошибка validate)",
+          "required": ["floor", "walls", "ceiling"],
+          "additionalProperties": false,
+          "properties": {
+            "floor": { "type": ["string", "null"], "format": "uuid" },
+            "walls": { "type": ["string", "null"], "format": "uuid" },
+            "ceiling": { "type": ["string", "null"], "format": "uuid" }
+          }
+        },
+        "materialVersionId": {
+          "type": ["string", "null"],
+          "format": "uuid",
+          "description": "Только 1.0 (один материал на все ограждения)"
+        },
         "materialNullReason": { "type": ["string", "null"] }
-      }
+      },
+      "oneOf": [
+        { "required": ["surfaceMaterials"], "not": { "required": ["materialVersionId"] } },
+        { "not": { "required": ["surfaceMaterials"] } }
+      ]
     },
     "materialVersion": {
       "type": "object",

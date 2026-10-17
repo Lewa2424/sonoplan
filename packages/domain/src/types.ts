@@ -3,8 +3,15 @@ import type { Quantity, LengthUnit, PowerLevelUnit } from "./units.js";
 import type { ProjectPoint3 } from "./coordinates.js";
 
 /** Версия схемы документа проекта (контракты / миграции). */
-export const PROJECT_SCHEMA_VERSION = "1.0" as const;
+export const PROJECT_SCHEMA_VERSION = "1.1" as const;
 export type ProjectSchemaVersion = typeof PROJECT_SCHEMA_VERSION;
+/**
+ * Версии, которые читаются через миграцию (`migrateModelSnapshot`).
+ * 1.0: один `room.materialVersionId` на все ограждения.
+ */
+export const LEGACY_PROJECT_SCHEMA_VERSIONS = ["1.0"] as const;
+export type LegacyProjectSchemaVersion =
+  (typeof LEGACY_PROJECT_SCHEMA_VERSIONS)[number];
 
 export type UtcIsoDateTime = string;
 
@@ -44,9 +51,15 @@ export interface Room {
   readonly floorContour: readonly FloorVertex[];
   /** Высота помещения, м. null ≠ 0. */
   readonly heightM: Quantity<LengthUnit>;
-  readonly materialVersionId: Uuid | null;
+  /** Материал каждой группы ограждений; null = не назначен (не α=0). */
+  readonly surfaceMaterials: RoomSurfaceMaterials;
   readonly materialNullReason?: string | null;
 }
+
+/** Группы ограждений призматического помещения: пол, стены (все), потолок/кровля. */
+export type RoomSurfaceKind = "floor" | "walls" | "ceiling";
+
+export type RoomSurfaceMaterials = Readonly<Record<RoomSurfaceKind, Uuid | null>>;
 
 /**
  * Минимальная версия материала каталога.

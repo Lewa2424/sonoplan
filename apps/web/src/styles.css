@@ -496,6 +496,26 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.props-surface + .props-surface {
+  margin-top: 10px;
+}
+
+.props-surface .props-meta {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.props-meta--warn {
+  color: var(--warn);
+}
+
+.props-surface-outdated {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .props-subtitle {
   margin: 0 0 6px;
   font-size: 0.95rem;

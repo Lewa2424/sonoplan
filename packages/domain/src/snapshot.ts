@@ -3,6 +3,10 @@
  * Хеш зависит только от акустической модели (не от имени проекта / камеры).
  */
 
+import {
+  UnsupportedSchemaVersionError,
+  migrateModelSnapshot,
+} from "./schemaMigration.js";
 import { sha256Hex } from "./sha256.js";
 import type { ModelSnapshot } from "./types.js";
 
@@ -53,14 +57,16 @@ export function serializeModelSnapshot(snapshot: ModelSnapshot): string {
   return canonicalJson(snapshot);
 }
 
+/** Разбор снимка; старые версии схемы мигрируются к текущей. */
 export function parseModelSnapshot(json: string): ModelSnapshot {
   const parsed: unknown = JSON.parse(json);
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("ModelSnapshot must be a JSON object");
+  if (
+    parsed !== null &&
+    typeof parsed === "object" &&
+    !Array.isArray(parsed) &&
+    !("schemaVersion" in parsed)
+  ) {
+    throw new UnsupportedSchemaVersionError(undefined);
   }
-  const obj = parsed as Record<string, unknown>;
-  if (obj["schemaVersion"] !== "1.0") {
-    throw new Error(`Unsupported schemaVersion: ${String(obj["schemaVersion"])}`);
-  }
-  return parsed as ModelSnapshot;
+  return migrateModelSnapshot(parsed);
 }

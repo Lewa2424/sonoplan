@@ -6,6 +6,10 @@ import hashlib
 import json
 from typing import Any
 
+# Writer version of new drafts; documents without a version predate it (1.0).
+CURRENT_SCHEMA_VERSION = "1.1"
+LEGACY_SCHEMA_VERSION = "1.0"
+
 
 def sort_keys_deep(value: Any) -> Any:
     if value is None or not isinstance(value, (dict, list)):
@@ -37,7 +41,7 @@ def compute_snapshot_hash(snapshot: dict[str, Any]) -> str:
 
 def empty_model_snapshot() -> dict[str, Any]:
     return {
-        "schemaVersion": "1.0",
+        "schemaVersion": CURRENT_SCHEMA_VERSION,
         "rooms": [],
         "sources": [],
         "workplaces": [],
@@ -48,7 +52,7 @@ def empty_model_snapshot() -> dict[str, Any]:
 
 def default_draft_body(name: str) -> dict[str, Any]:
     return {
-        "schemaVersion": "1.0",
+        "schemaVersion": CURRENT_SCHEMA_VERSION,
         "name": name,
         "model": empty_model_snapshot(),
     }
@@ -58,7 +62,9 @@ def extract_model_from_draft(body: dict[str, Any]) -> dict[str, Any]:
     model = body.get("model")
     if isinstance(model, dict):
         return {
-            "schemaVersion": model.get("schemaVersion", body.get("schemaVersion", "1.0")),
+            "schemaVersion": model.get(
+                "schemaVersion", body.get("schemaVersion", LEGACY_SCHEMA_VERSION)
+            ),
             "rooms": model.get("rooms", []),
             "sources": model.get("sources", []),
             "workplaces": model.get("workplaces", []),
@@ -67,7 +73,7 @@ def extract_model_from_draft(body: dict[str, Any]) -> dict[str, Any]:
         }
     # Allow flat draft for convenience
     return {
-        "schemaVersion": body.get("schemaVersion", "1.0"),
+        "schemaVersion": body.get("schemaVersion", LEGACY_SCHEMA_VERSION),
         "rooms": body.get("rooms", []),
         "sources": body.get("sources", []),
         "workplaces": body.get("workplaces", []),

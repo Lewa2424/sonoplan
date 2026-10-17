@@ -10,6 +10,8 @@ DEFAULT_MAJOR = 1
 DEFAULT_MINOR = 0
 NODE_VERTICES = 0
 NODE_GROUP = 1
+# a, b, c, idMaterial (uint32) + idRs, idEn (int32)
+FACE_RECORD_BYTES = 24
 
 @dataclass(frozen=True)
 class Face:
@@ -59,7 +61,7 @@ def read_cbin(path: Path) -> SurfaceMesh:
                     "<IIIIii", data, off
                 )
                 faces.append(Face(a, b, c, id_mat, id_rs, id_en))
-                off += 20
+                off += FACE_RECORD_BYTES
         else:
             raise ValueError(f"unknown cbin node type {node_type}")
         if next_brother != 0:
@@ -120,6 +122,56 @@ def scale_mesh_to_box(
     return SurfaceMesh(vertices=verts, faces=list(mesh.faces))
 
 
+def assign_box_surface_materials_inplace(
+    path: Path,
+    *,
+    height_m: float,
+    material_ids: dict[str, int],
+) -> dict[str, int]:
+    """Set each face idMaterial by plane: z=0 → floor, z=H → ceiling, else walls.
+
+    SPPS resolves a face material by ``idMaterial`` == ``type_surface/@id``;
+    tetra faces point at surface faces by index, so tetramesh.mbin is unchanged.
+    Returns face count per surface kind.
+    """
+    data = bytearray(path.read_bytes())
+    mesh = read_cbin(path)
+    tol = max(1e-4, 1e-5 * height_m)
+    counts = {kind: 0 for kind in material_ids}
+    off = 8
+    next_brother = 1
+    while next_brother != 0 and off + 12 <= len(data):
+        node_type, _pad, _first_son, next_brother = struct.unpack_from(
+            "<HHII", data, off
+        )
+        off += 12
+        if node_type == NODE_VERTICES:
+            (n_vert,) = struct.unpack_from("<I", data, off)
+            off += 4 + 12 * n_vert
+        elif node_type == NODE_GROUP:
+            off += 256
+            (n_face,) = struct.unpack_from("<I", data, off)
+            off += 4
+            for _ in range(n_face):
+                a, b, c = struct.unpack_from("<III", data, off)
+                zs = [mesh.vertices[i][2] for i in (a, b, c)]
+                if all(abs(z) <= tol for z in zs):
+                    kind = "floor"
+                elif all(abs(z - height_m) <= tol for z in zs):
+                    kind = "ceiling"
+                else:
+                    kind = "walls"
+                struct.pack_into("<I", data, off + 12, int(material_ids[kind]))
+                counts[kind] += 1
+                off += FACE_RECORD_BYTES
+        else:
+            raise ValueError(f"unknown cbin node type {node_type}")
+        if next_brother != 0:
+            off = int(next_brother)
+    path.write_bytes(bytes(data))
+    return counts
+
+
 def scale_cbin_file_inplace(
     src: Path,
     dst: Path,
@@ -170,7 +222,7 @@ def scale_cbin_file_inplace(
                     "<IIIIii", data, off
                 )
                 faces.append(Face(a, b, c, id_mat, id_rs, id_en))
-                off += 20
+                off += FACE_RECORD_BYTES
         else:
             raise ValueError(f"unknown cbin node type {node_type}")
         if next_brother != 0:

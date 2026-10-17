@@ -13,7 +13,7 @@ function snap(
   sourceZs: readonly number[],
 ): ModelSnapshot {
   return {
-    schemaVersion: "1.0",
+    schemaVersion: "1.1",
     rooms: [
       {
         id: id(1),
@@ -25,7 +25,7 @@ function snap(
           { x: 0, y: 0 },
         ],
         heightM: { value: heightM, unit: "m" },
-        materialVersionId: null,
+        surfaceMaterials: { floor: null, walls: null, ceiling: null },
       },
     ],
     sources: sourceZs.map((z, i) => ({

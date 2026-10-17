@@ -35,7 +35,9 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `apps/web/src/model/surfaceMapValidity.ts` | Правдоподобие сетки SPPS (заполнение ≥45 %, охват ≥90 %), наличие `laDb` и рамки `exportMeta`; `surfaceMapFromManifest` → сетка в координатах проекта |
 | `apps/web/src/model/lpPalette.ts` / `components/NoiseScaleLegend.tsx` | Фиксированная шкала дБА (≤60…>105, цвета DIN 45682 +30 дБ) для карты SPPS и оценки |
 | `packages/domain` | Типы; координаты; геометрия; `computeSnapshotHash`; `validateModel` |
-| `packages/domain/src/diffuseFieldEstimate.ts` | Предварительная оценка Lp/LA по формуле помещения (OPT-010), не SPPS; слой «Оценка» на плане |
+| `packages/domain/src/diffuseFieldEstimate.ts` | Предварительная оценка Lp/LA по формуле помещения (OPT-010), не SPPS; ᾱ по площади пола/стен/потолка; слой «Оценка» на плане |
+| `packages/domain/src/schemaMigration.ts` / `roomSurfaces.ts` | Миграция схемы 1.0 → 1.1; площади и материалы групп ограждений |
+| `packages/domain/src/soundPower.ts` | Суммарный LwA по октавам Lw; ровный спектр по заданному LwA |
 | `packages/domain/src/aWeighting.ts` / `planCut.ts` | A-коррекция октав (IEC 61672-1); высота среза плана — паритет с `export_revision._coupe_z_away_from_sources` |
 | `packages/contracts` | `schemas/project.schema.json`, `openapi/openapi.yaml`, `SCHEMA_VERSION` |
 | `services/api` | FastAPI: projects/draft/revisions/validate/**jobs** |
@@ -43,11 +45,11 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `services/api/src/sonoplan_api/job_execution.py` | inline/worker: adapter → fail codes / ResultManifest |
 | `services/api/src/sonoplan_api/github_actions_jobs.py` | Free Linux worker: dispatch + poll Actions artifacts |
 | `.github/workflows/run-spps-product-job.yml` | Product job: live SPPS on ubuntu-22.04 → job artifact |
-| `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box + materials α + coupe plane + sources/РМ |
-| `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube cbin/mbin floats to room box (preserve layout) |
+| `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box + α по поверхностям (`type_surface` пол=1 / стены=0 / потолок=2) + coupe plane + sources/РМ; payload 1.1, читает 1.0 |
+| `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube cbin/mbin floats to room box (preserve layout); `idMaterial` граней по плоскости |
 | `engine/adapter/sonoplan_adapter/rsbin_io.py` | ENG-006: decode coupe `.csbin` → grid по порядку записи SPPS (индексы граней Linux-SPPS усечены), уровень 10·lg(E/1e-12) как в I-Simpa |
 | `engine/adapter/sonoplan_adapter/weighting.py` | A-weighting по энергии полос; `laDb` карты из `recepteurss/<f> Hz/` со сверкой с Global (≤0.5 дБ) |
-| `apps/web/src/model/materialCatalog.ts` / `equipmentCatalog.ts` | Каталоги покрытий и оборудования (оценочные α / Lw) |
+| `apps/web/src/model/materialCatalog.ts` / `equipmentCatalog.ts` | Каталог покрытий (октавные α, akustik.ua/BRE, `mvp-2`) и оборудования (суммарный LwA) |
 | `docs/github-actions-worker.md` | Setup PAT / env for Actions backend |
 | `services/api/alembic` | `projects` / `drafts` / `revisions` / **`jobs`** |
 | `services/worker` | Celery `sonoplan.run_calculation` → `execute_job` |
@@ -120,7 +122,7 @@ fixture_replay (decode `expected/*.recp`); отключить: `SONOPLAN_SPPS_FI
 ## Публичные контракты
 
 - Префикс `/api/v1`; OpenAPI в `packages/contracts`
-- `schemaVersion`: `"1.0"`
+- `schemaVersion`: `"1.1"` (пишется); `"1.0"` читается — `migrateModelSnapshot`: `room.materialVersionId` → `surfaceMaterials` пола/стен/потолка; ревизии 1.0 в БД не переписываются
 - Jobs: `POST /jobs` (+ `Idempotency-Key`), `GET /jobs/{id}`, `POST /jobs/{id}/cancel`
 - Коды отказа ядра: `SPPS_NOT_LINUX`, `SPPS_BIN_MISSING`, `FIXTURE_INPUTS_MISSING`, …
 - Клиентские env: только `VITE_*`

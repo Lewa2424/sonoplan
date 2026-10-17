@@ -63,8 +63,10 @@ def test_create_list_project(client) -> None:
     assert r.status_code == 201
     project = r.json()
     assert project["name"] == "Цех А"
-    assert project["schemaVersion"] == "1.0"
+    assert project["schemaVersion"] == "1.1"
     assert project["currentRevisionId"] is None
+    draft = client.get(f"/api/v1/projects/{project['id']}/draft").json()
+    assert draft["body"]["model"]["schemaVersion"] == "1.1"
 
     listed = client.get("/api/v1/projects")
     assert listed.status_code == 200
@@ -134,6 +136,54 @@ def test_create_revision_returns_hash(client) -> None:
     assert v["ok"] is True
     assert v["errors"] == []
     assert v["snapshotHash"] == body["snapshotHash"]
+
+
+def _surface_model(ceiling: str | None) -> dict:
+    model = _rect_model()
+    model["schemaVersion"] = "1.1"
+    room = model["rooms"][0]
+    mat = room.pop("materialVersionId")
+    room["surfaceMaterials"] = {"floor": mat, "walls": mat, "ceiling": ceiling}
+    return model
+
+
+def _revision_of(client, model: dict) -> dict:
+    project_id = client.post("/api/v1/projects", json={"name": "Surfaces"}).json()["id"]
+    etag = client.get(f"/api/v1/projects/{project_id}/draft").json()["etag"]
+    client.patch(
+        f"/api/v1/projects/{project_id}/draft",
+        headers={"If-Match": etag},
+        json={"model": model},
+    )
+    rev = client.post(f"/api/v1/projects/{project_id}/revisions", json={}).json()
+    summary = next(
+        p for p in client.get("/api/v1/projects").json()["items"] if p["id"] == project_id
+    )
+    return {"rev": rev, "project": summary}
+
+
+def test_schema_11_revision_validates_each_surface_material(client) -> None:
+    ok = _revision_of(client, _surface_model("22222222-2222-4222-8222-222222222222"))
+    assert ok["rev"]["schemaVersion"] == "1.1"
+    assert ok["project"]["schemaVersion"] == "1.1"
+    v = client.post(f"/api/v1/revisions/{ok['rev']['revisionId']}/validate").json()
+    assert v["ok"] is True
+
+    bad = _revision_of(client, _surface_model(None))
+    v = client.post(f"/api/v1/revisions/{bad['rev']['revisionId']}/validate").json()
+    assert v["ok"] is False
+    missing = [e for e in v["errors"] if e["code"] == "room_surface_material_missing"]
+    assert [e["path"] for e in missing] == [
+        "rooms/11111111-1111-4111-8111-111111111111/surfaceMaterials/ceiling"
+    ]
+
+
+def test_legacy_10_draft_keeps_its_version_on_revision(client) -> None:
+    legacy = _revision_of(client, _rect_model())
+    assert legacy["rev"]["schemaVersion"] == "1.0"
+    assert legacy["project"]["schemaVersion"] == "1.0"
+    v = client.post(f"/api/v1/revisions/{legacy['rev']['revisionId']}/validate").json()
+    assert v["ok"] is True
 
 
 def test_validate_reports_contour_and_spectrum_errors(client) -> None:

@@ -353,7 +353,8 @@ components:
           enum: [ok]
         schemaVersion:
           type: string
-          example: "1.0"
+          description: Current writer version of the project document; 1.0 drafts/revisions remain readable.
+          example: "1.1"
 
     CapabilitiesResponse:
       type: object

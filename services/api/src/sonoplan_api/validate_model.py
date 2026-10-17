@@ -6,6 +6,9 @@ from typing import Any
 
 from sonoplan_api.geometry import point_in_polygon, validate_floor_contour
 
+# Schema 1.1; stored 1.0 revisions keep one room.materialVersionId (not re-checked).
+ROOM_SURFACE_KINDS = ("floor", "walls", "ceiling")
+
 
 def _source_has_usable_spectrum(source: dict[str, Any]) -> bool:
     spectrum = source.get("powerSpectrumLw") or []
@@ -65,6 +68,20 @@ def validate_model(snapshot: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
                     "entityId": room_id,
                 }
             )
+        if snapshot.get("schemaVersion") != "1.0":
+            material_ids = {m.get("id") for m in snapshot.get("materials") or []}
+            surfaces = room.get("surfaceMaterials") or {}
+            for surface in ROOM_SURFACE_KINDS:
+                if surfaces.get(surface) not in material_ids:
+                    errors.append(
+                        {
+                            "code": "room_surface_material_missing",
+                            "severity": "error",
+                            "message": f"Room {surface} has no material (α unknown ≠ 0)",
+                            "path": f"rooms/{room_id}/surfaceMaterials/{surface}",
+                            "entityId": room_id,
+                        }
+                    )
 
     solids = snapshot.get("solids") or []
     for source in snapshot.get("sources") or []:

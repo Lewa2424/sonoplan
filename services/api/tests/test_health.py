@@ -3,7 +3,7 @@ def test_health_ok(client) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
-    assert body["schemaVersion"] == "1.0"
+    assert body["schemaVersion"] == "1.1"
 
 
 def test_capabilities_is_stub(client) -> None:

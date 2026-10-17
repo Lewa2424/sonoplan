@@ -1,4 +1,5 @@
 import { pointInPolygon, validateFloorContour } from "./geometry.js";
+import { ROOM_SURFACE_KINDS, roomSurfaceMaterial } from "./roomSurfaces.js";
 import type {
   ModelSnapshot,
   Source,
@@ -54,7 +55,7 @@ function sourceInsideSolid(
 /**
  * Валидация снимка модели.
  * Блокирующие (error): незамкнутый контур, самопересечение, источник в solid,
- * отсутствующий спектр Lw, неверный unit Lw.
+ * отсутствующий спектр Lw, неверный unit Lw, ограждение без материала.
  * Warning: оценочные свойства материалов.
  */
 export function validateModel(snapshot: ModelSnapshot): {
@@ -83,6 +84,17 @@ export function validateModel(snapshot: ModelSnapshot): {
         path: `rooms/${room.id}/heightM`,
         entityId: room.id,
       });
+    }
+    for (const surface of ROOM_SURFACE_KINDS) {
+      if (!roomSurfaceMaterial(snapshot, room, surface)) {
+        errors.push({
+          code: "room_surface_material_missing",
+          severity: "error",
+          message: `Room ${surface} has no material (α unknown ≠ 0)`,
+          path: `rooms/${room.id}/surfaceMaterials/${surface}`,
+          entityId: room.id,
+        });
+      }
     }
   }
 

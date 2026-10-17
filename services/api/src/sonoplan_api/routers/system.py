@@ -3,10 +3,9 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from sonoplan_api.schemas import CapabilitiesResponse, HealthResponse
+from sonoplan_api.snapshot import CURRENT_SCHEMA_VERSION as SCHEMA_VERSION
 
 router = APIRouter(tags=["system"])
-
-SCHEMA_VERSION = "1.0"
 
 
 @router.get("/api/v1/health", response_model=HealthResponse)

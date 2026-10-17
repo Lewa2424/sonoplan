@@ -1,11 +1,21 @@
 import { useState } from "react";
 import {
+  ROOM_SURFACE_KINDS,
+  roomSurfaceMaterial,
+  totalLwA,
+  type MaterialVersion,
+  type RoomSurfaceKind,
+} from "@sonoplan/domain";
+import {
   contourVertexAngles,
   formatAngleDeg,
 } from "../model/contourHelpers";
 import { EQUIPMENT_CATALOG, SOLID_CATALOG } from "../model/equipmentCatalog";
-import { MATERIAL_CATALOG } from "../model/materialCatalog";
-import { STANDARD_BANDS_HZ } from "../model/factoryModel";
+import {
+  MATERIAL_CATALOG_VERSION,
+  materialByKey,
+  materialsForSurface,
+} from "../model/materialCatalog";
 import { ru } from "../i18n/ru";
 import { useEditorStore } from "../store/editorStore";
 
@@ -19,13 +29,13 @@ export function PropertiesPanel() {
   const applyRectangleRoom = useEditorStore((s) => s.applyRectangleRoom);
   const snapRoomRightAngles = useEditorStore((s) => s.snapRoomRightAngles);
   const updateSelectedName = useEditorStore((s) => s.updateSelectedName);
-  const updateSourceLw = useEditorStore((s) => s.updateSourceLw);
+  const updateSourceLwA = useEditorStore((s) => s.updateSourceLwA);
   const updateSourcePosition = useEditorStore((s) => s.updateSourcePosition);
   const updateWorkplacePosition = useEditorStore(
     (s) => s.updateWorkplacePosition,
   );
   const updateSolidHeight = useEditorStore((s) => s.updateSolidHeight);
-  const setRoomMaterial = useEditorStore((s) => s.setRoomMaterial);
+  const setRoomSurfaceMaterial = useEditorStore((s) => s.setRoomSurfaceMaterial);
   const setPendingEquipment = useEditorStore((s) => s.setPendingEquipment);
   const setPendingSolid = useEditorStore((s) => s.setPendingSolid);
   const pendingEquipmentKey = useEditorStore((s) => s.pendingEquipmentKey);
@@ -35,28 +45,22 @@ export function PropertiesPanel() {
   const markDirty = useEditorStore((s) => s.markDirty);
 
   const room = model.rooms[0];
-  const activeMat =
-    room?.materialVersionId != null
-      ? model.materials.find((m) => m.id === room.materialVersionId)
-      : null;
 
   const coatingsBlock = (
     <div className="props-block">
       <h4 className="props-subtitle">{ru.model.coatings}</h4>
       <p className="props-meta">{ru.model.coatingsHint}</p>
-      <label className="field">
-        <span>Материал ограждений</span>
-        <select
-          value={activeMat?.catalogKey ?? "concrete"}
-          onChange={(e) => setRoomMaterial(e.target.value)}
-        >
-          {MATERIAL_CATALOG.map((m) => (
-            <option key={m.catalogKey} value={m.catalogKey}>
-              {m.nameRu}
-            </option>
-          ))}
-        </select>
-      </label>
+      {room
+        ? ROOM_SURFACE_KINDS.map((surface) => (
+            <SurfaceMaterialField
+              key={surface}
+              surface={surface}
+              material={roomSurfaceMaterial(model, room, surface)}
+              onChange={(key) => setRoomSurfaceMaterial(surface, key)}
+            />
+          ))
+        : null}
+      <p className="props-meta">{ru.model.materialSource}</p>
     </div>
   );
 
@@ -216,7 +220,7 @@ export function PropertiesPanel() {
   if (selection.kind === "source") {
     const src = model.sources.find((s) => s.id === selection.id);
     if (!src) return null;
-    const lw0 = src.powerSpectrumLw[0]?.level.value ?? 90;
+    const lwA = totalLwA(src.powerSpectrumLw);
     return (
       <aside className="props-panel" aria-label="Свойства источника">
         <h3 className="props-title">Оборудование / источник</h3>
@@ -279,16 +283,24 @@ export function PropertiesPanel() {
           <input
             type="number"
             step={1}
-            value={lw0 ?? 90}
-            onChange={(e) => updateSourceLw(Number(e.target.value))}
+            value={lwA === null ? "" : round1(lwA)}
+            onChange={(e) => {
+              const v = e.target.valueAsNumber;
+              if (Number.isFinite(v)) updateSourceLwA(v);
+            }}
           />
         </label>
+        <p className="props-meta">{ru.model.lwFlatSpectrumNote}</p>
         <details className="props-details">
           <summary>{ru.model.spectrumAdvanced}</summary>
-          <p className="props-meta">
-            {STANDARD_BANDS_HZ.join(", ")} Гц — сейчас одинаковый Lw во всех
-            полосах
-          </p>
+          <p className="props-meta">{ru.model.lwBandsLabel}</p>
+          <ul className="props-angles">
+            {src.powerSpectrumLw.map((b) => (
+              <li key={b.bandHz}>
+                {b.bandHz} Гц: {b.level.value === null ? "—" : round1(b.level.value)} дБ
+              </li>
+            ))}
+          </ul>
         </details>
         <DeleteSelectedButton key={src.id} label={ru.model.deleteEquipment} />
         {placeBlock}
@@ -420,6 +432,74 @@ function DeleteSelectedButton({ label }: { label: string }) {
       </button>
     </div>
   );
+}
+
+function SurfaceMaterialField({
+  surface,
+  material,
+  onChange,
+}: {
+  surface: RoomSurfaceKind;
+  material: MaterialVersion | null;
+  onChange: (catalogKey: string) => void;
+}) {
+  const options = materialsForSurface(surface);
+  const inCatalog = material ? materialByKey(material.catalogKey) : undefined;
+  const listed = material && options.some((m) => m.catalogKey === material.catalogKey);
+  const alphas = material
+    ? TABLE_BANDS_HZ.map((hz) => {
+        const a = material.absorptionByBand.find((b) => b.bandHz === hz)?.alpha;
+        return a === null || a === undefined ? "—" : a.toFixed(2);
+      }).join(" / ")
+    : null;
+  return (
+    <div className="props-surface">
+      <label className="field">
+        <span>{ru.model.surfaceLabel[surface]}</span>
+        <select
+          value={material?.catalogKey ?? ""}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {material === null ? <option value="" disabled>—</option> : null}
+          {material && !listed ? (
+            <option value={material.catalogKey} disabled>
+              {inCatalog?.nameRu ?? `${material.name} (${ru.model.materialOutsideCatalog})`}
+            </option>
+          ) : null}
+          {options.map((m) => (
+            <option key={m.catalogKey} value={m.catalogKey}>
+              {m.nameRu}
+            </option>
+          ))}
+        </select>
+      </label>
+      {alphas ? (
+        <p className="props-meta">
+          {ru.model.alphaOctavesLabel}: {alphas}
+        </p>
+      ) : null}
+      {material && material.version !== MATERIAL_CATALOG_VERSION ? (
+        <div className="props-surface-outdated">
+          <p className="props-meta props-meta--warn">{ru.model.materialOutdated}</p>
+          {inCatalog && listed ? (
+            <button
+              type="button"
+              className="btn btn--chip"
+              onClick={() => onChange(material.catalogKey)}
+            >
+              {ru.model.materialRefresh}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const TABLE_BANDS_HZ = [125, 250, 500, 1000, 2000, 4000] as const;
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 function round3(n: number): number {

@@ -53,6 +53,40 @@ def _rect_snapshot(*, w: float = 20.0, d: float = 12.0, h: float = 6.0) -> dict:
     }
 
 
+def _surface_snapshot() -> dict:
+    snap = _rect_snapshot()
+    snap["schemaVersion"] = "1.1"
+
+    def mat(mid: str, a500: float, a1k: float) -> dict:
+        return {
+            "id": mid,
+            "catalogKey": mid,
+            "name": mid,
+            "version": "mvp-2",
+            "estimated": True,
+            "absorptionByBand": [
+                {"bandHz": 500, "alpha": a500},
+                {"bandHz": 1000, "alpha": a1k},
+            ],
+        }
+
+    snap["materials"] = [mat("mf", 0.01, 0.02), mat("mw", 0.03, 0.04), mat("mc", 0.8, 0.9)]
+    snap["rooms"][0]["surfaceMaterials"] = {"floor": "mf", "walls": "mw", "ceiling": "mc"}
+    return snap
+
+
+def _fixture_inputs() -> Path:
+    return Path(__file__).resolve().parents[2] / "fixtures" / "minimal_room" / "inputs"
+
+
+def _workdir_notes(payload: dict) -> tuple[str, ...]:
+    with tempfile.TemporaryDirectory() as tmp:
+        meta = write_spps_workdir(
+            payload=payload, out_dir=Path(tmp), fixture_inputs=_fixture_inputs()
+        )
+    return meta.notes
+
+
 class ExportRevisionTests(unittest.TestCase):
     def test_compact_payload_rectangle(self) -> None:
         snap = _rect_snapshot()
@@ -79,11 +113,66 @@ class ExportRevisionTests(unittest.TestCase):
         self.assertEqual(len(p["sources"]), 1)
         self.assertEqual(len(p["workplaces"]), 1)
         self.assertAlmostEqual(p["workplaces"][0]["z"], 1.5)
-        self.assertAlmostEqual(p["absorptionByBand"]["1000"], 0.7)
+        # Stored 1.0 revision: the single room material covers every surface.
+        self.assertEqual(p["schemaVersion"], "1.1")
+        for kind in ("floor", "walls", "ceiling"):
+            self.assertAlmostEqual(p["surfaceAbsorptionByBand"][kind]["1000"], 0.7)
+        self.assertNotIn("absorptionByBand", p)
         self.assertEqual(p["solidCount"], 1)
         self.assertIn("coupeZM", p)
         # Sources at z=1.5 → coupe must leave clearance (not coplanar blotch).
         self.assertGreaterEqual(abs(float(p["coupeZM"]) - 1.5), 0.35)
+
+    def test_schema_11_surface_materials_export_per_surface(self) -> None:
+        snap = _surface_snapshot()
+        p = compact_export_payload(snap)
+        self.assertEqual(p["surfaceAbsorptionByBand"]["floor"], {"500": 0.01, "1000": 0.02})
+        self.assertEqual(p["surfaceAbsorptionByBand"]["walls"], {"500": 0.03, "1000": 0.04})
+        self.assertEqual(p["surfaceAbsorptionByBand"]["ceiling"], {"500": 0.8, "1000": 0.9})
+
+    def test_schema_11_missing_surface_material_is_empty_not_borrowed(self) -> None:
+        snap = _surface_snapshot()
+        snap["rooms"][0]["surfaceMaterials"]["ceiling"] = None
+        p = compact_export_payload(snap)
+        self.assertEqual(p["surfaceAbsorptionByBand"]["ceiling"], {})
+        meta_notes = " ".join(_workdir_notes(p))
+        self.assertIn("default α=0.02 (no material on revision): ceiling", meta_notes)
+
+    def test_config_has_one_type_surface_per_surface_kind(self) -> None:
+        from sonoplan_adapter.export_revision import build_config_xml
+
+        root = build_config_xml(compact_export_payload(_surface_snapshot())).getroot()
+        types = {
+            t.get("name"): t for t in root.findall("surface_absorption_enum/type_surface")
+        }
+        self.assertEqual(
+            {k: t.get("id") for k, t in types.items()},
+            {"floor": "1", "walls": "0", "ceiling": "2"},
+        )
+
+        def absorb(kind: str, freq: int) -> float:
+            for b in types[kind].findall("bfreq"):
+                if b.get("freq") == str(freq):
+                    return float(b.get("absorb") or "nan")
+            raise AssertionError(freq)
+
+        self.assertAlmostEqual(absorb("floor", 1000), 0.02)
+        self.assertAlmostEqual(absorb("walls", 500), 0.03)
+        self.assertAlmostEqual(absorb("ceiling", 1000), 0.9)
+
+    def test_legacy_payload_absorption_applies_to_all_surfaces(self) -> None:
+        from sonoplan_adapter.export_revision import build_config_xml
+
+        payload = compact_export_payload(_rect_snapshot())
+        del payload["surfaceAbsorptionByBand"]
+        payload["schemaVersion"] = "1.0"
+        payload["absorptionByBand"] = {"1000": 0.3}
+        root = build_config_xml(payload).getroot()
+        types = root.findall("surface_absorption_enum/type_surface")
+        self.assertEqual(len(types), 3)
+        for t in types:
+            at_1k = [b for b in t.findall("bfreq") if b.get("freq") == "1000"]
+            self.assertAlmostEqual(float(at_1k[0].get("absorb") or "nan"), 0.3)
 
     def test_coupe_z_away_from_coplanar_sources(self) -> None:
         from sonoplan_adapter.export_revision import _coupe_z_away_from_sources
@@ -205,6 +294,41 @@ class ExportRevisionTests(unittest.TestCase):
             self.assertEqual(len(orig), len(scaled))
             self.assertEqual(orig[8:10], scaled[8:10])  # node type
             self.assertEqual(orig[10:12], scaled[10:12])  # pad (not zeroed)
+
+    def test_workdir_mesh_faces_carry_surface_material_ids(self) -> None:
+        fixture = _fixture_inputs()
+        if not (fixture / "mesh.cbin").is_file():
+            self.skipTest("fixture mesh missing")
+        payload = compact_export_payload(_surface_snapshot())
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            write_spps_workdir(payload=payload, out_dir=out, fixture_inputs=fixture)
+            surf = read_cbin(out / "mesh.cbin")
+            orig = (fixture / "mesh.cbin").read_bytes()
+            scaled = (out / "mesh.cbin").read_bytes()
+        by_mat: dict[int, list[set[float]]] = {}
+        for f in surf.faces:
+            zs = {round(surf.vertices[i][2], 6) for i in (f.a, f.b, f.c)}
+            by_mat.setdefault(f.id_mat, []).append(zs)
+        self.assertEqual(sorted(by_mat), [0, 1, 2])
+        self.assertTrue(all(zs == {0.0} for zs in by_mat[1]))  # floor
+        self.assertTrue(all(zs == {6.0} for zs in by_mat[2]))  # ceiling
+        self.assertEqual(len(by_mat[1]), 2)
+        self.assertEqual(len(by_mat[2]), 2)
+        self.assertEqual(len(by_mat[0]), 8)
+        # Only coordinates and idMaterial change; layout/pad bytes are preserved.
+        self.assertEqual(len(orig), len(scaled))
+        self.assertEqual(orig[120:132 + 256], scaled[120:132 + 256])
+
+    def test_read_cbin_face_records_are_24_bytes(self) -> None:
+        fixture = _fixture_inputs()
+        if not (fixture / "mesh.cbin").is_file():
+            self.skipTest("fixture mesh missing")
+        mesh = read_cbin(fixture / "mesh.cbin")
+        self.assertEqual(len(mesh.faces), 12)
+        for f in mesh.faces:
+            self.assertTrue(all(0 <= i < len(mesh.vertices) for i in (f.a, f.b, f.c)))
+            self.assertEqual((f.id_rs, f.id_en), (-1, -1))
 
     def test_inplace_identity_scale_preserves_fixture_bytes(self) -> None:
         root = Path(__file__).resolve().parents[2]

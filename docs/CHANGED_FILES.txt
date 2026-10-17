@@ -209,3 +209,9 @@ packages/domain/src/planCut.test.ts
 engine/adapter/sonoplan_adapter/weighting.py
 engine/adapter/tests/test_weighting.py
 apps/web/src/store/editorStore.test.ts
+apps/web/src/model/factoryModel.test.ts
+packages/domain/src/roomSurfaces.ts
+packages/domain/src/schemaMigration.ts
+packages/domain/src/schemaMigration.test.ts
+packages/domain/src/soundPower.ts
+packages/domain/src/soundPower.test.ts

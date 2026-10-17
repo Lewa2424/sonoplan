@@ -3,13 +3,19 @@
  *   Lp,band = Lw,band + 10·lg(Q / (4π r²) + 4 / R),  R = S·ᾱ / (1 − ᾱ).
  *
  * Это не SPPS и не замена проверенного расчёта (ТЗ OPT-010): не учитывает
- * экраны/препятствия, неравномерность поглощения, форму помещения, воздух.
+ * экраны/препятствия, распределение поглощения (только среднее ᾱ),
+ * форму помещения, воздух.
  * Источники и полосы складываются по энергии; при weighting «A» коррекция
  * применяется один раз к каждой невзвешенной полосе до суммирования.
  */
 import { aWeightingDb, type LevelWeighting } from "./aWeighting.js";
 import { pointInPolygon, stripClosingDuplicate } from "./geometry.js";
-import type { FloorVertex, ModelSnapshot } from "./types.js";
+import {
+  ROOM_SURFACE_KINDS,
+  roomSurfaceAreasM2,
+  roomSurfaceMaterial,
+} from "./roomSurfaces.js";
+import type { FloorVertex, ModelSnapshot, RoomSurfaceKind } from "./types.js";
 
 /** Всенаправленный источник в свободном поле (как directivite=0 в SPPS). */
 const DIRECTIVITY_Q = 1;
@@ -51,22 +57,11 @@ export type DiffuseFieldInputResult =
   | { readonly ok: true; readonly input: DiffuseFieldInput }
   | { readonly ok: false; readonly reason: DiffuseEstimateUnavailableReason };
 
-function polygonAreaAndPerimeter(ring: readonly FloorVertex[]): {
-  area: number;
-  perimeter: number;
-} {
-  let twiceArea = 0;
-  let perimeter = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!;
-    const b = ring[(i + 1) % ring.length]!;
-    twiceArea += a.x * b.y - b.x * a.y;
-    perimeter += Math.hypot(b.x - a.x, b.y - a.y);
-  }
-  return { area: Math.abs(twiceArea) / 2, perimeter };
-}
-
-/** Собрать вход оценки из черновика; неизвестное → причина, а не 0. */
+/**
+ * Собрать вход оценки из черновика; неизвестное → причина, а не 0.
+ * ᾱ полосы — среднее по площади пола, стен и потолка; полоса участвует,
+ * только если α известен у всех трёх групп (как type_surface в экспорте SPPS).
+ */
 export function buildDiffuseFieldInput(
   model: ModelSnapshot,
 ): DiffuseFieldInputResult {
@@ -77,16 +72,20 @@ export function buildDiffuseFieldInput(
     return { ok: false, reason: "room_height_unknown" };
   }
   const ring = stripClosingDuplicate(room.floorContour);
-  if (ring.length < 3) return { ok: false, reason: "room_contour_degenerate" };
-  const { area, perimeter } = polygonAreaAndPerimeter(ring);
-  if (!(area > 0)) return { ok: false, reason: "room_contour_degenerate" };
+  const areas = roomSurfaceAreasM2(room);
+  if (!areas) return { ok: false, reason: "room_contour_degenerate" };
 
-  // Same pick as the SPPS export: room material, else first material.
-  const material =
-    model.materials.find((m) => m.id === room.materialVersionId) ??
-    model.materials[0] ??
-    null;
-  if (!material) return { ok: false, reason: "no_material" };
+  const alphaBySurface = new Map<RoomSurfaceKind, ReadonlyMap<number, number>>();
+  for (const kind of ROOM_SURFACE_KINDS) {
+    const material = roomSurfaceMaterial(model, room, kind);
+    if (!material) return { ok: false, reason: "no_material" };
+    const byBand = new Map<number, number>();
+    for (const band of material.absorptionByBand) {
+      const a = band.alpha;
+      if (a !== null && Number.isFinite(a) && a >= 0) byBand.set(band.bandHz, a);
+    }
+    alphaBySurface.set(kind, byBand);
+  }
 
   const sources: DiffuseFieldSource[] = [];
   for (const s of model.sources) {
@@ -101,18 +100,30 @@ export function buildDiffuseFieldInput(
   }
   if (sources.length === 0) return { ok: false, reason: "no_sources" };
 
-  const totalSurface = 2 * area + perimeter * height;
+  const totalSurface = areas.floor + areas.walls + areas.ceiling;
+  const candidateBands = new Set<number>();
+  for (const byBand of alphaBySurface.values()) {
+    for (const hz of byBand.keys()) candidateBands.add(hz);
+  }
   const roomConstant = new Map<number, number>();
   const bands: number[] = [];
-  for (const band of material.absorptionByBand) {
-    const alpha = band.alpha;
-    if (alpha === null || !Number.isFinite(alpha) || alpha <= 0) continue;
-    if (!sources.some((s) => s.lwByBandHz.has(band.bandHz))) continue;
-    roomConstant.set(
-      band.bandHz,
-      alpha >= 1 ? Infinity : (totalSurface * alpha) / (1 - alpha),
-    );
-    bands.push(band.bandHz);
+  for (const hz of candidateBands) {
+    if (!sources.some((s) => s.lwByBandHz.has(hz))) continue;
+    let absorptionArea = 0;
+    let complete = true;
+    for (const kind of ROOM_SURFACE_KINDS) {
+      const a = alphaBySurface.get(kind)!.get(hz);
+      if (a === undefined) {
+        complete = false;
+        break;
+      }
+      absorptionArea += areas[kind] * a;
+    }
+    if (!complete) continue;
+    const alpha = absorptionArea / totalSurface;
+    if (!(alpha > 0)) continue;
+    roomConstant.set(hz, alpha >= 1 ? Infinity : (totalSurface * alpha) / (1 - alpha));
+    bands.push(hz);
   }
   if (bands.length === 0) return { ok: false, reason: "no_common_bands" };
   bands.sort((a, b) => a - b);
@@ -121,9 +132,9 @@ export function buildDiffuseFieldInput(
     ok: true,
     input: {
       contour: ring,
-      floorAreaM2: area,
+      floorAreaM2: areas.floor,
       totalSurfaceM2: totalSurface,
-      volumeM3: area * height,
+      volumeM3: areas.floor * height,
       bandsHz: bands,
       roomConstantByBandHz: roomConstant,
       sources,
