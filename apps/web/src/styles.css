@@ -200,6 +200,22 @@ body {
   color: var(--warn);
 }
 
+.btn--danger {
+  background: #b3261e;
+  border-color: #b3261e;
+  color: #fff;
+}
+
+.props-delete {
+  align-self: flex-start;
+}
+
+.props-delete-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .field {
   display: flex;
   flex-direction: column;

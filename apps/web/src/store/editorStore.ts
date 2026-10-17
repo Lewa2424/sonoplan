@@ -146,6 +146,8 @@ interface EditorState {
   updateWorkplacePosition: (x: number, y: number, z: number) => void;
   updateSolidHeight: (heightM: number) => void;
   moveSelectedBy: (dx: number, dy: number) => void;
+  /** Удаляет выбранный источник, рабочее место или препятствие (не помещение). */
+  deleteSelected: () => void;
   runValidate: () => Promise<void>;
   commitRevision: () => Promise<void>;
   saveDraft: () => Promise<void>;
@@ -743,6 +745,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       });
       get().markDirty();
     }
+  },
+
+  deleteSelected: () => {
+    const { selection, model } = get();
+    if (!selection || selection.kind === "room") return;
+    const id = selection.id;
+    const next =
+      selection.kind === "source"
+        ? { ...model, sources: model.sources.filter((s) => s.id !== id) }
+        : selection.kind === "workplace"
+          ? { ...model, workplaces: model.workplaces.filter((w) => w.id !== id) }
+          : { ...model, solids: model.solids.filter((s) => s.id !== id) };
+    set({ model: next, selection: null });
+    get().markDirty();
   },
 
   saveDraft: async () => {

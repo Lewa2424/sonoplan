@@ -208,3 +208,4 @@ packages/domain/src/planCut.ts
 packages/domain/src/planCut.test.ts
 engine/adapter/sonoplan_adapter/weighting.py
 engine/adapter/tests/test_weighting.py
+apps/web/src/store/editorStore.test.ts

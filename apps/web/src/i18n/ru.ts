@@ -38,6 +38,11 @@ export const ru = {
     solidsNote:
       "Стеллажи и перегородки сохраняются в модели; в текущем SPPS-расчёте в mesh не входят.",
     calculate: "Рассчитать",
+    deleteEquipment: "Удалить оборудование",
+    deleteWorkplace: "Удалить рабочее место",
+    deleteObstacle: "Удалить препятствие",
+    deleteConfirm: "Нажмите ещё раз — удалить",
+    deleteCancel: "Отмена",
     spectrumAdvanced: "Полосы Lw (подробно)",
     lwTypical: "Типовой шум Lw, дБ",
     staleLp:

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   contourVertexAngles,
   formatAngleDeg,
@@ -289,6 +290,7 @@ export function PropertiesPanel() {
             полосах
           </p>
         </details>
+        <DeleteSelectedButton key={src.id} label={ru.model.deleteEquipment} />
         {placeBlock}
       </aside>
     );
@@ -319,6 +321,7 @@ export function PropertiesPanel() {
             onChange={(e) => updateSolidHeight(Number(e.target.value))}
           />
         </label>
+        <DeleteSelectedButton key={solid.id} label={ru.model.deleteObstacle} />
         {placeBlock}
       </aside>
     );
@@ -382,8 +385,40 @@ export function PropertiesPanel() {
           }
         />
       </label>
+      <DeleteSelectedButton key={wp.id} label={ru.model.deleteWorkplace} />
       {placeBlock}
     </aside>
+  );
+}
+
+function DeleteSelectedButton({ label }: { label: string }) {
+  const deleteSelected = useEditorStore((s) => s.deleteSelected);
+  const [confirming, setConfirming] = useState(false);
+  if (!confirming) {
+    return (
+      <button
+        type="button"
+        className="btn btn--warn props-delete"
+        onClick={() => setConfirming(true)}
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <div className="props-delete-row">
+      <button
+        type="button"
+        className="btn btn--danger"
+        autoFocus
+        onClick={deleteSelected}
+      >
+        {ru.model.deleteConfirm}
+      </button>
+      <button type="button" className="btn" onClick={() => setConfirming(false)}>
+        {ru.model.deleteCancel}
+      </button>
+    </div>
   );
 }
 
