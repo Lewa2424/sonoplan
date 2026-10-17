@@ -45,8 +45,9 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `services/api/src/sonoplan_api/job_execution.py` | inline/worker: adapter → fail codes / ResultManifest |
 | `services/api/src/sonoplan_api/github_actions_jobs.py` | Free Linux worker: dispatch + poll Actions artifacts |
 | `.github/workflows/run-spps-product-job.yml` | Product job: live SPPS on ubuntu-22.04 → job artifact |
-| `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box + α по поверхностям (`type_surface` пол=1 / стены=0 / потолок=2) + coupe plane + sources/РМ; payload 1.1, читает 1.0 |
-| `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube cbin/mbin floats to room box (preserve layout); `idMaterial` граней по плоскости |
+| `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box; Phase 3A: AABB solids → Kuhn holes; α по поверхностям (`type_surface` пол=1 / стены=0 / потолок=2 / obstacle=3) + coupe + sources/РМ |
+| `engine/adapter/sonoplan_adapter/aabb_obstacle_mesh.py` | Phase 3A: ось-выровненные solids → conforming cbin/mbin без внешнего TetGen |
+| `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube (пусто); write_cbin/write_mbin для Phase 3A пары |
 | `engine/adapter/sonoplan_adapter/rsbin_io.py` | ENG-006: decode coupe `.csbin` → grid по порядку записи SPPS (индексы граней Linux-SPPS усечены), уровень 10·lg(E/1e-12) как в I-Simpa |
 | `engine/adapter/sonoplan_adapter/weighting.py` | A-weighting по энергии полос; `laDb` карты из `recepteurss/<f> Hz/` со сверкой с Global (≤0.5 дБ) |
 | `apps/web/src/model/materialCatalog.ts` / `equipmentCatalog.ts` | Каталог покрытий (октавные α, akustik.ua/BRE, `mvp-2`) и оборудования (суммарный LwA) |

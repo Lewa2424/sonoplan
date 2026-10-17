@@ -104,7 +104,21 @@ class ExportRevisionTests(unittest.TestCase):
             }
         ]
         snap["rooms"][0]["materialVersionId"] = "m1"
-        snap["solids"] = [{"id": "s1", "name": "Стеллаж"}]
+        snap["solids"] = [
+            {
+                "id": "s1",
+                "name": "Стеллаж",
+                "baseZM": 0,
+                "heightM": {"value": 2.5, "unit": "m"},
+                "floorContour": [
+                    {"x": 2, "y": 2},
+                    {"x": 4, "y": 2},
+                    {"x": 4, "y": 3},
+                    {"x": 2, "y": 3},
+                    {"x": 2, "y": 2},
+                ],
+            }
+        ]
         p = compact_export_payload(snap)
         self.assertTrue(p["box"]["exactRectangle"])
         self.assertAlmostEqual(p["box"]["widthM"], 20.0)
@@ -119,6 +133,8 @@ class ExportRevisionTests(unittest.TestCase):
             self.assertAlmostEqual(p["surfaceAbsorptionByBand"][kind]["1000"], 0.7)
         self.assertNotIn("absorptionByBand", p)
         self.assertEqual(p["solidCount"], 1)
+        self.assertEqual(len(p["solids"]), 1)
+        self.assertAlmostEqual(p["solids"][0]["xmin"], 2.0)
         self.assertIn("coupeZM", p)
         # Sources at z=1.5 → coupe must leave clearance (not coplanar blotch).
         self.assertGreaterEqual(abs(float(p["coupeZM"]) - 1.5), 0.35)
@@ -294,6 +310,45 @@ class ExportRevisionTests(unittest.TestCase):
             self.assertEqual(len(orig), len(scaled))
             self.assertEqual(orig[8:10], scaled[8:10])  # node type
             self.assertEqual(orig[10:12], scaled[10:12])  # pad (not zeroed)
+
+    def test_workdir_with_solids_carves_obstacle_mesh(self) -> None:
+        fixture = _fixture_inputs()
+        if not (fixture / "mesh.cbin").is_file():
+            self.skipTest("fixture mesh missing")
+        snap = _surface_snapshot()
+        snap["solids"] = [
+            {
+                "id": "part1",
+                "name": "Перегородка",
+                "baseZM": 0,
+                "heightM": {"value": 2.5, "unit": "m"},
+                "floorContour": [
+                    {"x": 9.0, "y": 3.0},
+                    {"x": 9.2, "y": 3.0},
+                    {"x": 9.2, "y": 9.0},
+                    {"x": 9.0, "y": 9.0},
+                    {"x": 9.0, "y": 3.0},
+                ],
+            }
+        ]
+        payload = compact_export_payload(snap)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            meta = write_spps_workdir(
+                payload=payload, out_dir=out, fixture_inputs=fixture
+            )
+            surf = read_cbin(out / "mesh.cbin")
+            tetra = read_mbin(out / "tetramesh.mbin")
+            cfg = (out / "config.xml").read_text(encoding="utf-8")
+        self.assertGreater(len(surf.faces), 12)
+        self.assertGreater(len(tetra.tetras), 6)
+        self.assertTrue(any(f.id_mat == 3 for f in surf.faces))
+        self.assertIn('id="3"', cfg)
+        self.assertIn('name="obstacle"', cfg)
+        joined = " ".join(meta.notes)
+        self.assertIn("Phase 3A", joined)
+        self.assertIn("carved into SPPS mesh", joined)
+        self.assertNotIn("not in SPPS mesh yet", joined)
 
     def test_workdir_mesh_faces_carry_surface_material_ids(self) -> None:
         fixture = _fixture_inputs()

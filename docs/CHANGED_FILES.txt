@@ -215,3 +215,5 @@ packages/domain/src/schemaMigration.ts
 packages/domain/src/schemaMigration.test.ts
 packages/domain/src/soundPower.ts
 packages/domain/src/soundPower.test.ts
+engine/adapter/sonoplan_adapter/aabb_obstacle_mesh.py
+engine/adapter/tests/test_aabb_obstacle_mesh.py

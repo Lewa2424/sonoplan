@@ -291,8 +291,9 @@ jobs:
           if mode == "export_box":
               phase = (
                   "GitHub Actions Linux SPPS (free worker). "
-                  "Phase 2A: room AABB box mesh + revision sources/workplaces. "
-                  "Not full polygon extrusion / TetGen yet."
+                  "Export mesh: AABB room; AABB solids carved when present "
+                  "(Phase 2A empty box / Phase 3A Kuhn holes). "
+                  "Not full polygon extrusion / external TetGen."
               )
           else:
               phase = (

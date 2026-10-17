@@ -10,16 +10,16 @@
 ## Что делает worker
 
 1. API (`SONOPLAN_JOBS_BACKEND=github_actions`) при `POST /jobs` вызывает `workflow_dispatch` для `.github/workflows/run-spps-product-job.yml`.
-2. Передаёт `export_json` (коробка AABB комнаты + источники/РМ из ревизии) — **Phase 2A**.
+2. Передаёт `export_json` (коробка AABB комнаты + источники/РМ/solids из ревизии) — **Phase 2A/3A**.
 3. Runner `ubuntu-22.04` строит `mesh.cbin`/`tetramesh.mbin`/`config.xml`, гоняет **живой** SPPS.
 4. Пишет `result_manifest.json` + `job_status.json` в artifact `sonoplan-job-{jobId}`.
 5. `GET /api/v1/jobs/{id}` синхронизирует статус и подтягивает artifact (публичный callback URL **не нужен**).
 
 ### Честность
 
-- Phase 2A: **AABB-коробка** по контуру (прямоугольник — точно; L/многоугольник — оболочка), не полный экструд + TetGen.
+- Phase 2A: **AABB-коробка** без solids (scale официального куба).
+- Phase 3A: **AABB-solids** вырезаются Kuhn-сеткой в `mesh.cbin`/`tetramesh.mbin` (α препятствий = стены). Не полный экструд / внешний TetGen.
 - Материалы: α из `materials` ревизии; горизонтальный `recepteur_surfacique_coupe` → `.csbin` при успехе SPPS (`mapAvailable`).
-- Solids (стеллажи/перегородки) в snapshot, **не** в mesh до TetGen.
 - Без `export_json` — fallback на fixture `minimal_room` (Phase 1).
 - Это не Windows `fixture_replay`: на Actions реально запускается Linux SPPS.
 - `executionMode`: `github_actions_pending` → `github_actions_spps`.

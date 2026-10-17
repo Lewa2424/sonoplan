@@ -1,7 +1,8 @@
-"""Build SPPS workdir from a SonoPlan revision snapshot (Phase 2A: AABB box).
+"""Build SPPS workdir from a SonoPlan revision snapshot.
 
-Irregular contours use the bounding box of the floor contour — honest note
-in the returned meta. Full polygon extrusion + TetGen is a later stage.
+Phase 2A: empty AABB box (scaled official cube).
+Phase 3A: AABB solids carved from a Kuhn tetrahedral grid (no TetGen binary).
+Irregular room contours still use the floor AABB — honest note in meta.
 """
 
 from __future__ import annotations
@@ -14,6 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .aabb_obstacle_mesh import (
+    MAT_OBSTACLE,
+    solid_boxes_from_payload_solids,
+    write_obstacle_mesh_files,
+)
 from .cbin_io import assign_box_surface_materials_inplace, scale_cbin_file_inplace
 from .mbin_io import scale_mbin_file_inplace
 
@@ -37,6 +43,7 @@ EXPORT_PAYLOAD_VERSION = "1.1"
 SURFACE_KINDS = ("floor", "walls", "ceiling")
 # type_surface ids ↔ mesh.cbin idMaterial; walls = 0 like the fixture default.
 SURFACE_MATERIAL_IDS = {"walls": 0, "floor": 1, "ceiling": 2}
+OBSTACLE_MATERIAL_ID = MAT_OBSTACLE
 DEFAULT_ALPHA = 0.02
 
 
@@ -189,7 +196,30 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
         source_zs=source_zs,
         height_m=height,
     )
-    solids = snapshot.get("solids") or []
+    solids_out: list[dict[str, Any]] = []
+    for solid in snapshot.get("solids") or []:
+        contour = solid.get("floorContour") or []
+        pts = [(float(p["x"]) - min_x, float(p["y"]) - min_y) for p in contour]
+        if len(pts) < 3:
+            continue
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        z0 = float(solid.get("baseZM") or 0.0)
+        h = float((solid.get("heightM") or {}).get("value") or 0.0)
+        if h <= 0:
+            continue
+        solids_out.append(
+            {
+                "id": solid.get("id"),
+                "name": solid.get("name") or "solid",
+                "xmin": max(0.0, min(xs)),
+                "xmax": min(width, max(xs)),
+                "ymin": max(0.0, min(ys)),
+                "ymax": min(depth, max(ys)),
+                "zmin": max(0.0, z0),
+                "zmax": min(height, z0 + h),
+            }
+        )
     return {
         "schemaVersion": EXPORT_PAYLOAD_VERSION,
         "box": {
@@ -204,7 +234,8 @@ def compact_export_payload(snapshot: dict[str, Any]) -> dict[str, Any]:
         "workplaces": workplaces,
         "surfaceAbsorptionByBand": surface_absorption_from_snapshot(snapshot),
         "coupeZM": coupe_z,
-        "solidCount": len(solids),
+        "solidCount": len(solids_out),
+        "solids": solids_out,
     }
 
 
@@ -372,13 +403,23 @@ def build_config_xml(payload: dict[str, Any]) -> ET.ElementTree:
         atm.set(k, v)
 
     mats = ET.SubElement(root, "surface_absorption_enum")
-    for kind, absorb_by_band in payload_surface_absorption(payload).items():
+    surface_alpha = payload_surface_absorption(payload)
+    for kind, absorb_by_band in surface_alpha.items():
         ts = ET.SubElement(mats, "type_surface")
         ts.set("id", str(SURFACE_MATERIAL_IDS[kind]))
         ts.set("name", kind)
         ts.set("resistivite", "100")
         ts.set("side_material", "1")
         for child in _bfreq_absorb(absorb_by_band):
+            ts.append(child)
+    # Obstacle faces (id=3): reuse walls α when solids are in the mesh.
+    if int(payload.get("solidCount") or 0) > 0:
+        ts = ET.SubElement(mats, "type_surface")
+        ts.set("id", str(OBSTACLE_MATERIAL_ID))
+        ts.set("name", "obstacle")
+        ts.set("resistivite", "100")
+        ts.set("side_material", "1")
+        for child in _bfreq_absorb(surface_alpha.get("walls") or {}):
             ts.append(child)
 
     ET.SubElement(root, "subdomains")
@@ -476,49 +517,70 @@ def write_spps_workdir(
     if not template_cbin.is_file() or not template_mbin.is_file():
         raise FileNotFoundError(f"fixture inputs missing under {fixture_inputs}")
 
-    # In-place float patch of official cube binaries (preserve pad/groupName).
-    # Full rewrite via write_cbin zeroed those bytes and led to SPPS SIGSEGV (-11)
-    # after "mesh loaded successfully" when loading tetramesh.
-    scale_cbin_file_inplace(
-        template_cbin,
-        out_dir / "mesh.cbin",
-        width_m=width,
-        depth_m=depth,
-        height_m=height,
-        ref_size=REF_CUBE_M,
+    solid_boxes = solid_boxes_from_payload_solids(
+        list(payload.get("solids") or []),
+        width=width,
+        depth=depth,
+        height=height,
     )
-    scale_mbin_file_inplace(
-        template_mbin,
-        out_dir / "tetramesh.mbin",
-        width_m=width,
-        depth_m=depth,
-        height_m=height,
-        ref_size=REF_CUBE_M,
-    )
-    face_counts = assign_box_surface_materials_inplace(
-        out_dir / "mesh.cbin", height_m=height, material_ids=SURFACE_MATERIAL_IDS
-    )
-    if any(face_counts[kind] == 0 for kind in SURFACE_KINDS):
-        raise ValueError(f"box mesh surface classification failed: {face_counts}")
+    mesh_notes: tuple[str, ...] = ()
+    if solid_boxes:
+        # Phase 3A: rewrite both cbin and mbin together (paired topology).
+        built = write_obstacle_mesh_files(
+            out_cbin=out_dir / "mesh.cbin",
+            out_mbin=out_dir / "tetramesh.mbin",
+            width=width,
+            depth=depth,
+            height=height,
+            solids=solid_boxes,
+        )
+        mesh_notes = built.notes
+    else:
+        # Phase 2A: in-place float patch of official cube (preserve pad/groupName).
+        # Full rewrite of cbin alone (old mbin) previously SIGSEGV'd SPPS.
+        scale_cbin_file_inplace(
+            template_cbin,
+            out_dir / "mesh.cbin",
+            width_m=width,
+            depth_m=depth,
+            height_m=height,
+            ref_size=REF_CUBE_M,
+        )
+        scale_mbin_file_inplace(
+            template_mbin,
+            out_dir / "tetramesh.mbin",
+            width_m=width,
+            depth_m=depth,
+            height_m=height,
+            ref_size=REF_CUBE_M,
+        )
+        face_counts = assign_box_surface_materials_inplace(
+            out_dir / "mesh.cbin", height_m=height, material_ids=SURFACE_MATERIAL_IDS
+        )
+        if any(face_counts[kind] == 0 for kind in SURFACE_KINDS):
+            raise ValueError(f"box mesh surface classification failed: {face_counts}")
+        mesh_notes = (
+            "Phase 2A: SPPS box mesh scaled in-place from official cube cbin/mbin to room AABB.",
+        )
 
     tree = build_config_xml(payload)
     tree.write(out_dir / "config.xml", encoding="utf-8", xml_declaration=True)
     if speaker.is_file():
         shutil.copy2(speaker, out_dir / "speaker-test3.txt")
 
-    notes = [
-        "Phase 2A: SPPS box mesh scaled in-place from official cube cbin/mbin to room AABB.",
-        f"Box {width:.3g}×{depth:.3g}×{height:.3g} m; sources/workplaces from revision.",
-        (
-            f"Horizontal coupe at z={float(payload.get('coupeZM') or 0):.2f} m "
-            "(offset from source Z so SPPS can record plane crossings)."
-        ),
-        (
-            "SPPS bands: octaves "
-            + ", ".join(str(f) for f in sorted(CALC_BANDS))
-            + " Hz; cut map saved per band for dBA (A-weighting once per band)."
-        ),
-    ]
+    notes = list(mesh_notes)
+    notes.append(
+        f"Box {width:.3g}×{depth:.3g}×{height:.3g} m; sources/workplaces from revision."
+    )
+    notes.append(
+        f"Horizontal coupe at z={float(payload.get('coupeZM') or 0):.2f} m "
+        "(offset from source Z so SPPS can record plane crossings)."
+    )
+    notes.append(
+        "SPPS bands: octaves "
+        + ", ".join(str(f) for f in sorted(CALC_BANDS))
+        + " Hz; cut map saved per band for dBA (A-weighting once per band)."
+    )
     surface_alpha = payload_surface_absorption(payload)
     from_revision = [k for k in SURFACE_KINDS if surface_alpha[k]]
     defaulted = [k for k in SURFACE_KINDS if not surface_alpha[k]]
@@ -534,16 +596,16 @@ def write_spps_workdir(
             + ", ".join(defaulted)
             + "."
         )
-    solid_count = int(payload.get("solidCount") or 0)
+    solid_count = len(solid_boxes)
     if solid_count > 0:
         notes.append(
-            f"{solid_count} solid(s) in model — not in SPPS mesh yet "
-            "(TetGen/encombrement later; not claimed in this run)."
+            f"{solid_count} solid(s) carved into SPPS mesh as AABB holes "
+            "(obstacle α = walls; not full TetGen / arbitrary polyhedra)."
         )
     if not exact:
         notes.append(
             "Floor contour is not an axis-aligned rectangle — used AABB "
-            "(not full polygon extrusion; TetGen later)."
+            "(not full polygon extrusion)."
         )
     return ExportMeta(
         width_m=width,
