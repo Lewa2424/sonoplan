@@ -12,80 +12,80 @@ from sonoplan_adapter.results import decode_spps_workdir
 from sonoplan_adapter.rsbin_io import read_surface_csbin, write_synthetic_csbin
 
 
+def _decode_grid(
+    nodes: list[tuple[float, float, float]],
+    faces: list[tuple[int, int, int, float]],
+    *,
+    truncated_ivec3: bool = False,
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "rs_cut.csbin"
+        write_synthetic_csbin(
+            path, nodes=nodes, faces=faces, truncated_ivec3=truncated_ivec3
+        )
+        return read_surface_csbin(path)
+
+
 class RsbinIoTests(unittest.TestCase):
     def test_roundtrip_synthetic_and_grid(self) -> None:
-        # 2×2 cells → 4 quads as 8 triangles, non-zero energy on some faces
-        nodes = [
-            (0.0, 0.0, 1.5),
-            (1.0, 0.0, 1.5),
-            (2.0, 0.0, 1.5),
-            (0.0, 1.0, 1.5),
-            (1.0, 1.0, 1.5),
-            (2.0, 1.0, 1.5),
-            (0.0, 2.0, 1.5),
-            (1.0, 2.0, 1.5),
-            (2.0, 2.0, 1.5),
-        ]
-        # energy high enough for finite Lp
-        e = 1e-2
-        faces = [
-            (0, 1, 4, e),
-            (0, 4, 3, e),
-            (1, 2, 5, e * 2),
-            (1, 5, 4, e * 2),
-        ]
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "rs_cut.csbin"
-            write_synthetic_csbin(path, nodes=nodes, faces=faces)
-            decoded = read_surface_csbin(path)
-            self.assertEqual(len(decoded.nodes), 9)
-            self.assertEqual(len(decoded.faces), 4)
-            self.assertIsNotNone(decoded.grid)
-            assert decoded.grid is not None
-            self.assertTrue(any(v is not None for v in decoded.grid["lpDb"]))
-            self.assertGreater(decoded.grid["nx"], 0)
+        nodes = _spps_nodes(
+            b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0), nb_rows=2, nb_cols=2
+        )
+        faces = _spps_coupe(
+            base=0, nb_rows=2, nb_cols=2, energy={(0, 0): 1e-2, (1, 0): 2e-2}
+        )
+        decoded = _decode_grid(nodes, faces)
+        self.assertEqual(len(decoded.nodes), 9)
+        self.assertEqual(len(decoded.faces), 8)
+        grid = decoded.grid
+        assert grid is not None
+        self.assertEqual((grid["nx"], grid["ny"]), (2, 2))
+        self.assertEqual(grid["source"], "rsbin_coupe_write_order")
+        # One record per cell (both triangles are SPPS copies), not their sum.
+        self.assertAlmostEqual(
+            grid["lpDb"][0], 10 * math.log10(1e-2 / 1e-12), places=4
+        )
+        self.assertAlmostEqual(
+            grid["lpDb"][1], 10 * math.log10(2e-2 / 1e-12), places=4
+        )
+        self.assertIsNone(grid["lpDb"][2])
 
-    def test_coupe_two_triangles_per_cell_no_stripe_rows(self) -> None:
-        """SPPS coupe writes 2 triangles/cell; lattice grid must not stripe."""
-        # 3×3 nodes → 2×2 cells; each cell = 2 triangles (centroids mid-cell)
-        nodes = [
-            (0.0, 0.0, 1.5),
-            (1.0, 0.0, 1.5),
-            (2.0, 0.0, 1.5),
-            (0.0, 1.0, 1.5),
-            (1.0, 1.0, 1.5),
-            (2.0, 1.0, 1.5),
-            (0.0, 2.0, 1.5),
-            (1.0, 2.0, 1.5),
-            (2.0, 2.0, 1.5),
-        ]
-        e = 1e-2
-        faces = [
-            # cell (0,0)
-            (0, 1, 4, e),
-            (0, 4, 3, e),
-            # cell (1,0)
-            (1, 2, 5, e),
-            (1, 5, 4, e),
-            # cell (0,1)
-            (3, 4, 7, e),
-            (3, 7, 6, e),
-            # cell (1,1)
-            (4, 5, 8, e),
-            (4, 8, 7, e),
-        ]
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "rs_cut.csbin"
-            write_synthetic_csbin(path, nodes=nodes, faces=faces)
-            grid = read_surface_csbin(path).grid
-            self.assertIsNotNone(grid)
-            assert grid is not None
-            self.assertEqual(grid["nx"], 2)
-            self.assertEqual(grid["ny"], 2)
-            self.assertEqual(grid.get("source"), "rsbin_coupe_lattice")
-            lp = grid["lpDb"]
-            self.assertEqual(len(lp), 4)
-            self.assertTrue(all(v is not None for v in lp))
+    def test_linux_truncated_indices_place_cells_at_true_position(self) -> None:
+        """Regression: job ef039873 — Linux SPPS writes faces as (a, 0, b).
+
+        Treating the 0 as a vertex pulled every centroid toward node 0 and
+        squeezed the room's field into the 2/3 corner of the plan.
+        """
+        rows, cols = 6, 3
+        nodes = _spps_nodes(
+            b=(0.0, 0.0), step_u=(2.0, 0.0), step_v=(0.0, 2.0), nb_rows=rows, nb_cols=cols
+        )
+        faces = _spps_coupe(base=0, nb_rows=rows, nb_cols=cols, energy={(5, 2): 1e-2})
+        decoded = _decode_grid(nodes, faces, truncated_ivec3=True)
+        grid = decoded.grid
+        assert grid is not None
+        self.assertEqual(decoded.faces[0].b, 0)
+        self.assertEqual(decoded.receivers[0].layout["indexLayout"], "truncated_ivec3")
+        self.assertEqual((grid["nx"], grid["ny"]), (rows, cols))
+        filled = [k for k, v in enumerate(grid["lpDb"]) if v is not None]
+        # Far corner cell (x 10..12, y 4..6) stays in the far corner.
+        self.assertEqual(filled, [2 * rows + 5])
+
+    def test_off_lattice_nodes_give_no_grid(self) -> None:
+        nodes = _spps_nodes(
+            b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0), nb_rows=2, nb_cols=2
+        )
+        nodes[4] = (1.3, 1.0, 1.9)
+        faces = _spps_coupe(base=0, nb_rows=2, nb_cols=2, energy={(0, 0): 1e-2})
+        decoded = _decode_grid(nodes, faces)
+        self.assertIsNone(decoded.grid)
+        self.assertIn("off the coupe lattice", decoded.receivers[0].layout["error"])
+
+    def test_faces_not_in_coupe_order_give_no_grid(self) -> None:
+        nodes = [(0.0, 0.0, 1.5), (1.0, 0.0, 1.5), (0.0, 1.0, 1.5), (1.0, 1.0, 1.5)]
+        decoded = _decode_grid(nodes, [(0, 1, 2, 1e-2), (1, 3, 2, 1e-2)])
+        self.assertIsNone(decoded.grid)
+        self.assertIn("error", decoded.receivers[0].layout)
 
     def test_manifest_map_available_from_csbin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -93,12 +93,14 @@ class RsbinIoTests(unittest.TestCase):
             (work / "recepteurss").mkdir()
             write_synthetic_csbin(
                 work / "recepteurss" / "rs_cut.csbin",
-                nodes=[
-                    (0.0, 0.0, 1.5),
-                    (1.0, 0.0, 1.5),
-                    (0.0, 1.0, 1.5),
-                ],
-                faces=[(0, 1, 2, 1e-2)],
+                nodes=_spps_nodes(
+                    b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0),
+                    nb_rows=2, nb_cols=2,
+                ),
+                faces=_spps_coupe(
+                    base=0, nb_rows=2, nb_cols=2,
+                    energy={(r, c): 1e-2 for r in range(2) for c in range(2)},
+                ),
             )
             # No punctual — decode_spps_workdir.ok may be False, but surface present
             decoded = decode_spps_workdir(work)
@@ -157,6 +159,11 @@ def _spps_nodes(
 
 class MultiReceiverCoupeTests(unittest.TestCase):
     def test_plan_and_mirror_probe_decode_independently(self) -> None:
+        for truncated in (False, True):
+            with self.subTest(truncated_ivec3=truncated):
+                self._check_plan_and_mirror(truncated)
+
+    def _check_plan_and_mirror(self, truncated: bool) -> None:
         rows, cols = 4, 3
         main_nodes = _spps_nodes(
             b=(0.0, 0.0), step_u=(1.0, 0.0), step_v=(0.0, 1.0), nb_rows=rows, nb_cols=cols
@@ -176,6 +183,7 @@ class MultiReceiverCoupeTests(unittest.TestCase):
                 nodes=main_nodes + probe_nodes,
                 faces=main_faces,
                 extra_receivers=((7002, "probe_coupe_mirror", probe_faces),),
+                truncated_ivec3=truncated,
             )
             decoded = read_surface_csbin(path)
         self.assertEqual(decoded.receiver_name, "plan_coupe")
@@ -194,6 +202,7 @@ class MultiReceiverCoupeTests(unittest.TestCase):
             {
                 "nbRows": rows,
                 "nbCols": cols,
+                "indexLayout": "truncated_ivec3" if truncated else "exact",
                 "energizedCells": 1,
                 "energizedRowMin": 3,
                 "energizedRowMax": 3,
@@ -284,8 +293,8 @@ class PerBandCutATests(unittest.TestCase):
         self.assertTrue(surface["aWeighting"]["available"], surface["aWeighting"])
         grid = surface["grid"]
         self.assertEqual(grid["laBandsHz"], [125, 1000])
-        # Each cell: two triangles → 2e-2 per band. LA = L1000 + 10·lg(1 + 10^−1.61).
-        l1000 = 10 * math.log10(2e-2 / (20e-6) ** 2)
+        # 1e-2 per cell and band. LA = L1000 + 10·lg(1 + 10^−1.61).
+        l1000 = 10 * math.log10(1e-2 / 1e-12)
         for la, lz in zip(grid["laDb"], grid["lpDb"]):
             self.assertAlmostEqual(la, l1000 + 10 * math.log10(1 + 10 ** -1.61), places=4)
             self.assertAlmostEqual(lz, l1000 + 10 * math.log10(2), places=4)

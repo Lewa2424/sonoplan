@@ -45,7 +45,7 @@ CI-путь без Docker Desktop: `.github/workflows/run-spps-job.yml` скач
 | `.github/workflows/run-spps-product-job.yml` | Product job: live SPPS on ubuntu-22.04 → job artifact |
 | `engine/adapter/sonoplan_adapter/export_revision.py` | Phase 2A: AABB box + materials α + coupe plane + sources/РМ |
 | `engine/adapter/sonoplan_adapter/cbin_io.py` / `mbin_io.py` | In-place scale official cube cbin/mbin floats to room box (preserve layout) |
-| `engine/adapter/sonoplan_adapter/rsbin_io.py` | ENG-006: decode surface/coupe `.csbin` → Lp grid (not from punctual) |
+| `engine/adapter/sonoplan_adapter/rsbin_io.py` | ENG-006: decode coupe `.csbin` → grid по порядку записи SPPS (индексы граней Linux-SPPS усечены), уровень 10·lg(E/1e-12) как в I-Simpa |
 | `engine/adapter/sonoplan_adapter/weighting.py` | A-weighting по энергии полос; `laDb` карты из `recepteurss/<f> Hz/` со сверкой с Global (≤0.5 дБ) |
 | `apps/web/src/model/materialCatalog.ts` / `equipmentCatalog.ts` | Каталоги покрытий и оборудования (оценочные α / Lw) |
 | `docs/github-actions-worker.md` | Setup PAT / env for Actions backend |

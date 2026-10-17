@@ -109,24 +109,14 @@ class ExportRevisionTests(unittest.TestCase):
         self.assertGreater(f["cx"], 20.0)
         self.assertLess(f["cx"] - 20.0, 0.1)
 
-    def test_mirror_probe_coupe_has_b_in_far_corner(self) -> None:
+    def test_only_plan_coupe_is_exported(self) -> None:
         from sonoplan_adapter.export_revision import build_config_xml
 
         payload = compact_export_payload(_rect_snapshot(w=20, d=12, h=6))
         coupes = build_config_xml(payload).getroot().findall(
             "recepteurss/recepteur_surfacique_coupe"
         )
-        self.assertEqual([c.get("name") for c in coupes], ["plan_coupe", "probe_coupe_mirror"])
-        main, probe = coupes
-        g = {k: float(probe.get(k) or "nan") for k in ("ax", "ay", "bx", "by", "cx", "cy")}
-        self.assertGreater(g["bx"], 20.0)
-        self.assertGreater(g["by"], 12.0)
-        self.assertLess(g["cx"], 0.0)
-        self.assertAlmostEqual(g["cy"], g["by"])
-        self.assertAlmostEqual(g["ax"], g["bx"])
-        self.assertLess(g["ay"], 0.0)
-        for k in ("az", "bz", "cz", "resolution"):
-            self.assertEqual(probe.get(k), main.get(k))
+        self.assertEqual([c.get("name") for c in coupes], ["plan_coupe"])
 
     def test_all_model_octaves_computed_and_cut_saved_per_band(self) -> None:
         from sonoplan_adapter.export_revision import build_config_xml

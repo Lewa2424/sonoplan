@@ -1,7 +1,7 @@
 """I-Simpa formatRSBIN (*.csbin) reader — surface / cutting-plane receivers.
 
 Port of ``lib_interface/.../rsbin.cpp`` ImportBIN (VERSION=3).
-Energy on disk is p²-homogeneous (same family as .recp); Lp via energy_to_lp.
+Cell values are energy per cell area; levels use the I-Simpa surface reference.
 """
 
 from __future__ import annotations
@@ -12,9 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .results import P0_INV_PREF2
-
 RSBIN_VERSION = 3
+SURFACE_REF = 1e-12
 # Layout matching typical MSVC packing used by I-Simpa RSBIN ExportBIN.
 _NODE_SIZE = 12  # 3×float
 _FACE_SIZE = 16  # 3×int32 indices + int32 nbRecords
@@ -88,7 +87,8 @@ class SurfaceCsbin:
                 for i, r in enumerate(self.receivers or [])
             ],
             "notes": [
-                "RSBIN energy is p^2-homogeneous; Lp after energy sum.",
+                "RSBIN cell value = energy / cell area; L = 10*log10(E/1e-12) after time sum (I-Simpa surface convention).",
+                "Cells placed by SPPS write order (Linux RSBIN face indices are truncated).",
                 "Zero face energy → lpDb=null (not 0 dB).",
             ],
         }
@@ -99,9 +99,14 @@ class CsbinDecodeError(ValueError):
 
 
 def energy_sum_to_lp(energy: float) -> float | None:
+    """Surface/coupe level as I-Simpa shows it (Recepteurs_surfacique.cpp).
+
+    RSBIN cell values are intensity-like (cell energy / cell area), so the
+    reference is 1e-12, not the punctual p0² = (20 µPa)².
+    """
     if energy <= 0 or not math.isfinite(energy):
         return None
-    return 10.0 * math.log10(energy * P0_INV_PREF2)
+    return 10.0 * math.log10(energy / SURFACE_REF)
 
 
 _HEADER_FMT = "<iIIIIIiiifi"
@@ -116,10 +121,12 @@ def write_synthetic_csbin(
     receiver_name: str = "plan_coupe",
     time_step_s: float = 5e-4,
     extra_receivers: tuple[tuple[int, str, list[tuple[int, int, int, float]]], ...] = (),
+    truncated_ivec3: bool = False,
 ) -> None:
     """Write a minimal VERSION=3 RSBIN for unit tests (not from SPPS).
 
-    Zero-energy faces get ``nbRecords=0`` like SPPS.
+    Zero-energy faces get ``nbRecords=0`` like SPPS. ``truncated_ivec3``
+    stores indices as Linux SPPS does: ``(a, 0, b)``.
     """
     receivers = ((7001, receiver_name, faces), *extra_receivers)
     buf = bytearray()
@@ -146,6 +153,8 @@ def write_synthetic_csbin(
         buf += struct.pack("<ii", int(xml_index), len(rec_faces))
         buf += bytes(name_field)
         for a, b, c, energy in rec_faces:
+            if truncated_ivec3:
+                a, b, c = a, 0, b
             if energy > 0:
                 buf += struct.pack("<iiii", int(a), int(b), int(c), 1)
                 buf += struct.pack("<Hxxf", 0, float(energy))
@@ -224,13 +233,14 @@ def read_surface_csbin(path: Path | str) -> SurfaceCsbin:
                     lp_db=energy_sum_to_lp(energy_sum),
                 )
             )
+        grid, layout = _decode_coupe_block(nodes, faces_out)
         blocks.append(
             SurfaceReceiverBlock(
                 xml_index=int(xml_index),
                 name=receiver_name or "surface",
                 faces=faces_out,
-                grid=_faces_to_grid(nodes, faces_out),
-                layout=_coupe_index_layout(faces_out),
+                grid=grid,
+                layout=layout,
             )
         )
 
@@ -248,37 +258,132 @@ def read_surface_csbin(path: Path | str) -> SurfaceCsbin:
     )
 
 
-def _coupe_index_layout(faces: list[SurfaceFaceEnergy]) -> dict[str, Any] | None:
-    """Energized cell extents in SPPS write order (no node coordinates used).
+def _coupe_write_order(
+    faces: list[SurfaceFaceEnergy],
+) -> tuple[int, int, int, str] | str:
+    """(node base, nbRows, nbCols, indexLayout) of a SPPS coupe block, or a reason.
 
-    SauveRecepteursSurfaciquesCoupe writes face ``2*(col + row*nbcols)`` with
-    vertex ``b = base + col + row*(nbcols+1)`` and ``c = b + nbcols + 1``.
-    Cross-checks the coordinate-based grid against the raw SPPS cell index.
+    SauveRecepteursSurfaciquesCoupe writes face ``2*(col + row*nbcols)`` as
+    ``(base+col+1+row*nvc, base+col+row*nvc, base+col+(row+1)*nvc)``, nvc = nbcols+1.
+    Linux SPPS memcpy's a ``long``-based ivec3 into three int32, so the file
+    holds ``(a_lo, a_hi=0, b_lo)`` and vertex c is lost ("truncated_ivec3").
+    Cells are therefore placed by write order, never by the stored c index.
     """
     if len(faces) < 2 or len(faces) % 2:
-        return None
-    nb_cols = faces[0].c - faces[0].b - 1
-    if nb_cols < 1 or (len(faces) // 2) % nb_cols:
-        return None
-    nb_rows = (len(faces) // 2) // nb_cols
-    rows: list[int] = []
-    cols: list[int] = []
-    for k in range(0, len(faces), 2):
-        if faces[k].energy_sum > 0 and math.isfinite(faces[k].energy_sum):
-            cell = k // 2
-            rows.append(cell // nb_cols)
-            cols.append(cell % nb_cols)
-    if not rows:
-        return {"nbRows": nb_rows, "nbCols": nb_cols, "energizedCells": 0}
-    return {
+        return "face count is not two triangles per cell"
+    f0, f1 = faces[0], faces[1]
+    base = f0.a - 1
+    if base < 0:
+        return "first face vertex a < 1"
+    if f0.c == base and f1.a == f0.a:
+        layout = "truncated_ivec3"
+        nvc = f1.c - base
+    elif f0.b == base and f1.a == f0.a and f1.b == f0.c:
+        layout = "exact"
+        nvc = f0.c - base
+    else:
+        return "faces are not in SPPS coupe write order"
+    nb_cols = nvc - 1
+    cells = len(faces) // 2
+    if nb_cols < 1 or cells % nb_cols:
+        return f"cell count {cells} not divisible by nbCols {nb_cols}"
+    return base, cells // nb_cols, nb_cols, layout
+
+
+def _decode_coupe_block(
+    nodes: list[tuple[float, float, float]],
+    faces: list[SurfaceFaceEnergy],
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Plan grid + layout diagnostics for one coupe receiver.
+
+    Node ``base + col + row*nvc`` = B + row·stepU + col·stepV (BC = U, BA = V).
+    The lattice is verified before use; a non-lattice block or a plane whose
+    cells are not axis-aligned in XY yields no grid (map not published).
+    Both triangles of a cell carry the same records (SPPS memcpy), so the
+    cell value is taken once; it is cell energy / cell area as SPPS writes it.
+    """
+    order = _coupe_write_order(faces)
+    if isinstance(order, str):
+        return None, {"error": order}
+    base, nb_rows, nb_cols, index_layout = order
+    nvc = nb_cols + 1
+    end = base + (nb_rows + 1) * nvc
+    if end > len(nodes):
+        return None, {"error": f"node block {base}..{end} exceeds {len(nodes)} nodes"}
+    b = nodes[base]
+    step_v = tuple(nodes[base + 1][k] - b[k] for k in range(3))
+    step_u = tuple(nodes[base + nvc][k] - b[k] for k in range(3))
+    tol = 1e-3 * max(math.hypot(*step_u), math.hypot(*step_v)) + 1e-4
+    for row in range(nb_rows + 1):
+        for col in range(nb_cols + 1):
+            n = nodes[base + col + row * nvc]
+            if any(
+                abs(n[k] - (b[k] + row * step_u[k] + col * step_v[k])) > tol
+                for k in range(3)
+            ):
+                return None, {"error": f"node ({row},{col}) off the coupe lattice"}
+
+    layout: dict[str, Any] = {
         "nbRows": nb_rows,
         "nbCols": nb_cols,
-        "energizedCells": len(rows),
-        "energizedRowMin": min(rows),
-        "energizedRowMax": max(rows),
-        "energizedColMin": min(cols),
-        "energizedColMax": max(cols),
+        "indexLayout": index_layout,
     }
+    energized = [
+        (k // nb_cols, k % nb_cols)
+        for k in range(nb_rows * nb_cols)
+        if faces[2 * k].energy_sum > 0 and math.isfinite(faces[2 * k].energy_sum)
+    ]
+    layout["energizedCells"] = len(energized)
+    if energized:
+        layout.update(
+            energizedRowMin=min(r for r, _ in energized),
+            energizedRowMax=max(r for r, _ in energized),
+            energizedColMin=min(c for _, c in energized),
+            energizedColMax=max(c for _, c in energized),
+        )
+
+    def _axis(step: tuple[float, ...]) -> int | None:
+        if abs(step[2]) > tol:
+            return None
+        if abs(step[1]) <= tol and abs(step[0]) > tol:
+            return 0
+        if abs(step[0]) <= tol and abs(step[1]) > tol:
+            return 1
+        return None
+
+    u_axis, v_axis = _axis(step_u), _axis(step_v)
+    if u_axis is None or v_axis is None or u_axis == v_axis:
+        layout["error"] = "coupe cells are not axis-aligned in plan"
+        return None, layout
+    cell = {u_axis: abs(step_u[u_axis]), v_axis: abs(step_v[v_axis])}
+    count = {u_axis: nb_rows, v_axis: nb_cols}
+    block = nodes[base:end]
+    min_x = min(n[0] for n in block)
+    min_y = min(n[1] for n in block)
+    nx, ny = count[0], count[1]
+    lp_db: list[float | None] = [None] * (nx * ny)
+    for k in range(nb_rows * nb_cols):
+        row, col = divmod(k, nb_cols)
+        cx = b[0] + (row + 0.5) * step_u[0] + (col + 0.5) * step_v[0]
+        cy = b[1] + (row + 0.5) * step_u[1] + (col + 0.5) * step_v[1]
+        i = min(nx - 1, max(0, int((cx - min_x) / cell[0])))
+        j = min(ny - 1, max(0, int((cy - min_y) / cell[1])))
+        lp_db[j * nx + i] = energy_sum_to_lp(faces[2 * k].energy_sum)
+    if not any(v is not None for v in lp_db):
+        return None, layout
+    return {
+        "originX": min_x,
+        "originY": min_y,
+        "cellSizeM": cell[0],
+        "cellSizeYM": cell[1],
+        "nx": nx,
+        "ny": ny,
+        "zM": sum(n[2] for n in block) / len(block),
+        "lpDb": lp_db,
+        "quantity": "Lp_dB",
+        "unit": "dB",
+        "source": "rsbin_coupe_write_order",
+    }, layout
 
 
 def grid_energy_span(grid: dict[str, Any]) -> tuple[float, float]:
@@ -294,123 +399,3 @@ def grid_energy_span(grid: dict[str, Any]) -> tuple[float, float]:
         return 0.0, 0.0
     return (max(xs) - min(xs) + 1) / nx, (max(ys) - min(ys) + 1) / ny
 
-
-def _faces_to_grid(
-    nodes: list[tuple[float, float, float]],
-    faces: list[SurfaceFaceEnergy],
-) -> dict[str, Any] | None:
-    """Bin face energy into a regular XY grid for plan heatmap.
-
-    Coupe RSBIN stores each cell as **two triangles**. Centroid-only spacing
-    is ~½–⅓ of the true cell → empty stripe rows in the plan. Prefer the
-    **node lattice** (unique X/Y of vertices) as the cell size.
-    """
-    if not faces or not nodes:
-        return None
-    centroids: list[tuple[float, float, float, float]] = []
-    zs: list[float] = []
-    for f in faces:
-        try:
-            pa, pb, pc = nodes[f.a], nodes[f.b], nodes[f.c]
-        except IndexError:
-            continue
-        if f.energy_sum <= 0:
-            continue
-        cx = (pa[0] + pb[0] + pc[0]) / 3.0
-        cy = (pa[1] + pb[1] + pc[1]) / 3.0
-        cz = (pa[2] + pb[2] + pc[2]) / 3.0
-        zs.append(cz)
-        centroids.append((cx, cy, f.energy_sum, cz))
-    if not centroids:
-        return None
-
-    # Node lattice = true coupe cell pitch (not triangle-centroid pitch).
-    # Several receivers share one node table — use only this receiver's nodes.
-    own = [
-        nodes[i]
-        for i in sorted({i for f in faces for i in (f.a, f.b, f.c)})
-        if 0 <= i < len(nodes)
-    ]
-    node_xs = sorted({round(n[0], 5) for n in own})
-    node_ys = sorted({round(n[1], 5) for n in own})
-    use_lattice = len(node_xs) >= 2 and len(node_ys) >= 2
-    if use_lattice:
-        dxs = [node_xs[i + 1] - node_xs[i] for i in range(len(node_xs) - 1)]
-        dys = [node_ys[i + 1] - node_ys[i] for i in range(len(node_ys) - 1)]
-        cell_x = max(sorted(dxs)[len(dxs) // 2], 1e-4)
-        cell_y = max(sorted(dys)[len(dys) // 2], 1e-4)
-        min_x, min_y = node_xs[0], node_ys[0]
-        nx = len(node_xs) - 1
-        ny = len(node_ys) - 1
-        source = "rsbin_coupe_lattice"
-    else:
-        xs = [c[0] for c in centroids]
-        ys = [c[1] for c in centroids]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        span_x = max(max_x - min_x, 1e-3)
-        span_y = max(max_y - min_y, 1e-3)
-        uniq_x = sorted({round(x, 4) for x in xs})
-        uniq_y = sorted({round(y, 4) for y in ys})
-        dxs = [
-            uniq_x[i + 1] - uniq_x[i]
-            for i in range(len(uniq_x) - 1)
-            if uniq_x[i + 1] > uniq_x[i]
-        ]
-        dys = [
-            uniq_y[i + 1] - uniq_y[i]
-            for i in range(len(uniq_y) - 1)
-            if uniq_y[i + 1] > uniq_y[i]
-        ]
-        # Prefer larger median so triangle-pair half-steps do not stripe.
-        cell = 0.5
-        if dxs:
-            cell = max(cell, sorted(dxs)[len(dxs) // 2])
-        if dys:
-            cell = max(cell, sorted(dys)[len(dys) // 2])
-        cell = max(min(cell, 5.0), 0.05)
-        cell_x = cell_y = cell
-        nx = max(1, int(math.ceil(span_x / cell_x)))
-        ny = max(1, int(math.ceil(span_y / cell_y)))
-        source = "rsbin_face_centroids"
-
-    while nx * ny > 80_000 and (cell_x < 5.0 or cell_y < 5.0):
-        cell_x = min(cell_x * 1.5, 5.0)
-        cell_y = min(cell_y * 1.5, 5.0)
-        if use_lattice:
-            nx = max(1, int(math.ceil((node_xs[-1] - node_xs[0]) / cell_x)))
-            ny = max(1, int(math.ceil((node_ys[-1] - node_ys[0]) / cell_y)))
-        else:
-            nx = max(1, int(math.ceil(span_x / cell_x)))
-            ny = max(1, int(math.ceil(span_y / cell_y)))
-
-    energy = [0.0] * (nx * ny)
-    counts = [0] * (nx * ny)
-    for cx, cy, e, _cz in centroids:
-        i = min(nx - 1, max(0, int((cx - min_x) / cell_x)))
-        j = min(ny - 1, max(0, int((cy - min_y) / cell_y)))
-        idx = j * nx + i
-        energy[idx] += e
-        counts[idx] += 1
-    lp_db: list[float | None] = []
-    for idx in range(nx * ny):
-        if counts[idx] == 0:
-            lp_db.append(None)
-        else:
-            lp_db.append(energy_sum_to_lp(energy[idx]))
-    z_m = sum(zs) / len(zs) if zs else 1.5
-    if not any(v is not None for v in lp_db):
-        return None
-    return {
-        "originX": min_x,
-        "originY": min_y,
-        "cellSizeM": cell_x,
-        "cellSizeYM": cell_y,
-        "nx": nx,
-        "ny": ny,
-        "zM": z_m,
-        "lpDb": lp_db,
-        "quantity": "Lp_dB",
-        "unit": "dB",
-        "source": source,
-    }
